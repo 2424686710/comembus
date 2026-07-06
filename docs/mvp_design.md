@@ -49,6 +49,31 @@
 
 这些限制是有意保留的，目的是先把最小闭环和测试打牢。
 
+## Benchmark 口径
+
+为了在不重构核心代码的前提下比较两条通路，当前仓库新增了 `benchmarks/bench_transport.py`，对两种模式做对照：
+
+- `direct_uds`：完整 payload 通过 UDS 发送给每个 receiver。
+- `shm_ref`：payload 先写一次共享内存，再通过 UDS 发送 `ObjectRef` 给每个 receiver。
+
+当前 benchmark 的实现约束如下：
+
+- 继续复用现有 `AgentBusServer` / `AgentBusClient`。
+- 多 receiver 通过 `logs_r0`、`logs_r1`、`logs_r2` 这类 topic 模拟广播。
+- `direct_uds` 下，每个 receiver 都会收到一份完整 payload。
+- `shm_ref` 下，共享内存每轮只写一次，每个 receiver 只拿到 `ObjectRef`。
+- 每轮都必须做 `sha256` 校验。
+- 发生异常时，已经创建的共享内存段必须在 `finally` 中清理。
+
+由于 MVP 的协议层默认限制 frame 体积不超过 1MB，这个 benchmark 会只在 benchmark 进程里临时放宽该限制，以便测量 8MB 负载下 `direct_uds` 与 `shm_ref` 的差异。这样可以保持核心代码不重构，同时仍然保留 MVP 默认的控制面安全边界。
+
+`uds_payload_bytes` 的统计口径是“该轮真正承载 benchmark 数据的 UDS frame 总字节数”，包括：
+
+- producer 发布 payload 到 server 的 frame。
+- server 在 `poll` 响应里把 payload 或 `ObjectRef` 返回给 receiver 的 frame。
+
+`shm_bytes_written` 则表示该轮写入共享内存的数据量。对 `shm_ref` 来说应当只写一次；对 `direct_uds` 则恒为 `0`。
+
 ## 后续扩展方向
 
 后续如果进入比赛完整版本，可以在这个 MVP 上继续扩展：
@@ -58,4 +83,3 @@
 - 共享黑板：在共享内存上层实现多 agent 可见的状态表或对象目录。
 - 生命周期管理：加入引用计数、租约、心跳和回收器，减少共享内存泄漏风险。
 - benchmark：系统化测量小消息延迟、大对象吞吐、复制次数、CPU 占用和 `/dev/shm` 使用情况。
-
