@@ -1,9 +1,16 @@
 FROM openeuler/openeuler:24.03-lts-sp3
 
-RUN dnf install -y python3 git findutils procps-ng which \
+RUN dnf install -y \
+    bash \
+    python3 \
+    git \
+    findutils \
+    procps-ng \
+    which \
     && dnf clean all
 
 WORKDIR /workspace
+
 COPY . /workspace
 
 CMD ["bash", "scripts/run_tests.sh"]
