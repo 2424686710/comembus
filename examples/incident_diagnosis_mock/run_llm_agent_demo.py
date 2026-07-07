@@ -6,20 +6,21 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
-from typing import Dict, List
+from typing import Dict, List, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from comembus.llm.agent import LLMReviewAgent
+from comembus.llm.local_http_client import resolve_model_name
 from comembus.memory.blackboard import SharedBlackboard
 from comembus.memory.unit import MemoryUnit
 from comembus.state.task_state import TaskState
 from examples.incident_diagnosis_mock.scenarios import IncidentScenario, default_scenarios
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--provider",
@@ -33,11 +34,16 @@ def parse_args() -> argparse.Namespace:
         help="Optional local OpenAI-compatible endpoint for provider=local_http.",
     )
     parser.add_argument(
+        "--model",
+        default="",
+        help="Optional local model name for provider=local_http.",
+    )
+    parser.add_argument(
         "--db-path",
         default="results/llm_agent_demo.sqlite",
         help="SQLite path for temporary memory reuse data.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def build_demo_task_state(scenario: IncidentScenario) -> TaskState:
@@ -103,6 +109,7 @@ def seed_demo_memories(
 def run_llm_agent_demo(
     provider: str = "mock",
     endpoint: str | None = None,
+    model: str | None = None,
     db_path: str = "results/llm_agent_demo.sqlite",
 ) -> Dict[str, object]:
     results_path = Path(db_path)
@@ -119,9 +126,17 @@ def run_llm_agent_demo(
             task_state.facts.get("log_summary", ""),
             task_state.facts.get("config_summary", ""),
         ]
-        agent = LLMReviewAgent.from_provider(provider=provider, endpoint=endpoint or None)
+        resolved_model = "mock"
+        if provider == "local_http":
+            resolved_model = resolve_model_name(model)
+        agent = LLMReviewAgent.from_provider(
+            provider=provider,
+            endpoint=endpoint or None,
+            model=model or None,
+        )
         result = agent.review(task_state=task_state, memories=memories, evidence=evidence)
         result["task_id"] = task_state.task_id
+        result["model"] = resolved_model
         return result
     finally:
         board.close()
@@ -132,9 +147,11 @@ def main() -> int:
     result = run_llm_agent_demo(
         provider=args.provider,
         endpoint=args.endpoint or None,
+        model=args.model or None,
         db_path=args.db_path,
     )
     print(f"provider={result['provider']}")
+    print(f"model={result['model']}")
     print(f"used_fallback={str(bool(result['used_fallback'])).lower()}")
     print(f"root_cause={result['root_cause']}")
     print(f"report={result['report']}")

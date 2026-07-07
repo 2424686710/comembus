@@ -19,6 +19,7 @@ from comembus.memory.blackboard import SharedBlackboard
 from examples.incident_diagnosis_mock.scenarios import (
     IncidentScenario,
     default_scenarios,
+    expand_scenarios,
     load_scenarios,
 )
 
@@ -207,11 +208,7 @@ def _write_follow_up_memories(
 
 def _benchmark_scenarios(task_count: int, scenario_file: str) -> List[IncidentScenario]:
     scenarios = load_scenarios(scenario_file) if scenario_file else default_scenarios()
-    if task_count > len(scenarios):
-        raise ValueError(
-            f"requested {task_count} tasks but only {len(scenarios)} scenarios are available"
-        )
-    return scenarios[:task_count]
+    return expand_scenarios(scenarios, task_count)
 
 
 def write_results(path: str, rows: Iterable[MemoryReuseRow]) -> None:

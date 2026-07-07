@@ -25,8 +25,15 @@ class LLMReviewAgent:
         cls,
         provider: str = "mock",
         endpoint: str | None = None,
+        model: str | None = None,
     ) -> "LLMReviewAgent":
-        return cls(llm_client=build_llm_client(provider=provider, endpoint=endpoint))
+        return cls(
+            llm_client=build_llm_client(
+                provider=provider,
+                endpoint=endpoint,
+                model=model,
+            )
+        )
 
     def review(
         self,

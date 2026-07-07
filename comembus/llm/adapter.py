@@ -33,12 +33,16 @@ class BaseLLMClient(ABC):
         raise NotImplementedError
 
 
-def build_llm_client(provider: str, endpoint: str | None = None) -> BaseLLMClient:
+def build_llm_client(
+    provider: str,
+    endpoint: str | None = None,
+    model: str | None = None,
+) -> BaseLLMClient:
     normalized = provider.strip().lower() if isinstance(provider, str) else "mock"
     if normalized == "local_http":
         from .local_http_client import LocalHTTPChatClient
 
-        return LocalHTTPChatClient(endpoint=endpoint)
+        return LocalHTTPChatClient(endpoint=endpoint, model=model)
 
     from .mock_client import MockLLMClient
 

@@ -233,6 +233,42 @@ def load_scenarios(path: str) -> List[IncidentScenario]:
     return scenarios
 
 
+def expand_scenarios(
+    scenarios: List[IncidentScenario],
+    task_count: int,
+) -> List[IncidentScenario]:
+    if task_count <= 0:
+        raise ValueError("task_count must be positive")
+    if not scenarios:
+        raise ValueError("at least one scenario is required")
+    if task_count <= len(scenarios):
+        return scenarios[:task_count]
+
+    expanded: List[IncidentScenario] = []
+    base_count = len(scenarios)
+    for index in range(task_count):
+        base = scenarios[index % base_count]
+        cycle = (index // base_count) + 1
+        task_index = index + 1
+        task_topic = base.task_topic
+        if cycle > 1:
+            task_topic = f"{base.task_topic} [cycle {cycle}]"
+        expanded.append(
+            IncidentScenario(
+                task_index=task_index,
+                task_topic=task_topic,
+                family=base.family,
+                log_pattern=base.log_pattern,
+                config_issue=base.config_issue,
+                expected_root_cause=base.expected_root_cause,
+                tags=list(base.tags),
+                related_memory_query=base.related_memory_query,
+                expected_skipped_steps=list(base.expected_skipped_steps),
+            )
+        )
+    return expanded
+
+
 def scenario_to_log_bytes(
     scenario: IncidentScenario,
     size_bytes: int = 8 * 1024 * 1024,

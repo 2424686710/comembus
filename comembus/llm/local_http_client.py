@@ -16,8 +16,14 @@ from .mock_client import MockLLMClient
 class LocalHTTPChatClient(BaseLLMClient):
     """Call a local OpenAI-compatible chat completions endpoint."""
 
-    def __init__(self, endpoint: str | None = None, timeout_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        endpoint: str | None = None,
+        model: str | None = None,
+        timeout_seconds: float = 30.0,
+    ) -> None:
         self._endpoint = endpoint or os.environ.get("COMEMBUS_LLM_ENDPOINT", "")
+        self._model = resolve_model_name(model)
         self._timeout_seconds = float(timeout_seconds)
         self._fallback = MockLLMClient()
 
@@ -31,7 +37,7 @@ class LocalHTTPChatClient(BaseLLMClient):
             return self._fallback_response(messages, temperature, started)
 
         payload = {
-            "model": "local-model",
+            "model": self._model,
             "messages": [{"role": item.role, "content": item.content} for item in messages],
             "temperature": float(temperature),
         }
@@ -71,6 +77,19 @@ class LocalHTTPChatClient(BaseLLMClient):
             latency_ms=latency_ms,
             used_fallback=True,
         )
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+
+def resolve_model_name(model: str | None = None) -> str:
+    if isinstance(model, str) and model.strip():
+        return model.strip()
+    env_model = os.environ.get("COMEMBUS_LLM_MODEL", "").strip()
+    if env_model:
+        return env_model
+    return "local-model"
 
 
 def _extract_content(raw_body: str) -> str:

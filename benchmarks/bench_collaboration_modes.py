@@ -19,6 +19,7 @@ from comembus.collab.text_mode import TextCollaborationRunner
 from examples.incident_diagnosis_mock.scenarios import (
     IncidentScenario,
     default_scenarios,
+    expand_scenarios,
     load_scenarios,
 )
 
@@ -141,11 +142,7 @@ def print_summary(path: str, rows: List[CollaborationMetrics]) -> None:
 
 def _benchmark_scenarios(task_count: int, scenario_file: str) -> List[IncidentScenario]:
     scenarios = load_scenarios(scenario_file) if scenario_file else default_scenarios()
-    if task_count > len(scenarios):
-        raise ValueError(
-            f"requested {task_count} tasks but only {len(scenarios)} scenarios are available"
-        )
-    return scenarios[:task_count]
+    return expand_scenarios(scenarios, task_count)
 
 
 def main() -> int:
