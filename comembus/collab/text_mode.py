@@ -6,7 +6,9 @@ from dataclasses import dataclass
 import hashlib
 import time
 import uuid
-from typing import Dict, List
+from typing import List
+
+from examples.incident_diagnosis_mock.scenarios import IncidentScenario
 
 from .metrics import CollaborationMetrics, estimate_tokens, json_size_bytes
 from .protocol import TextMessage
@@ -18,6 +20,7 @@ class TextCollaborationRunner:
 
     task_index: int
     task_topic: str
+    scenario: IncidentScenario | None = None
     text_context_bytes: int = 65536
     baseline_steps: int = 5
 
@@ -25,15 +28,16 @@ class TextCollaborationRunner:
         started = time.perf_counter()
         previous_sections: List[str] = []
         messages: List[TextMessage] = []
+        goal = self._goal()
+        log_signal = self._log_signal()
+        config_issue = self._config_issue()
+        expected_root_cause = self._expected_root_cause()
 
         planner_text = self._build_text_message(
             stage="planner_to_log",
-            goal="Diagnose a database connection timeout incident",
+            goal=goal,
             current_full_context="No prior structured context is available.",
-            log_excerpt=(
-                "Simulated log summary: database timeout, connection pool exhaustion, "
-                "request failures, and retry confusion."
-            ),
+            log_excerpt=log_signal,
             previous_facts="None yet.",
             next_instruction="Analyze the logs and produce a natural language summary.",
             expected_output=(
@@ -49,16 +53,10 @@ class TextCollaborationRunner:
 
         log_text = self._build_text_message(
             stage="log_to_config",
-            goal="Diagnose a database connection timeout incident",
+            goal=goal,
             current_full_context="The planner asked for a full natural language handoff.",
-            log_excerpt=(
-                "Observed repeated DatabaseTimeout errors and ConnectionPoolExhausted "
-                "warnings in checkout-api logs."
-            ),
-            previous_facts=(
-                "Fact: database timeout is reproducible. "
-                "Fact: connection pool exhaustion is visible in logs."
-            ),
+            log_excerpt=log_signal,
+            previous_facts=f"Fact: log analysis observed signal={log_signal}.",
             next_instruction="Check configuration and compare it with the log findings.",
             expected_output="Return a full prose explanation plus any configuration suspicion.",
             previous_sections=previous_sections,
@@ -70,16 +68,13 @@ class TextCollaborationRunner:
 
         config_text = self._build_text_message(
             stage="config_to_review",
-            goal="Diagnose a database connection timeout incident",
+            goal=goal,
             current_full_context=(
                 "The current conversation already includes planner context and the "
                 "log agent's full prose handoff."
             ),
-            log_excerpt="Relevant log context repeated for completeness: database timeout plus pool pressure.",
-            previous_facts=(
-                "Fact: database timeout remains the top log symptom. "
-                "Fact: configuration review found a wrong database port."
-            ),
+            log_excerpt=f"Relevant log context repeated for completeness: {log_signal}.",
+            previous_facts=f"Fact: configuration review found issue={config_issue}.",
             next_instruction="Review the entire incident narrative and determine the root cause.",
             expected_output="Return a final report with root cause and recommended action.",
             previous_sections=previous_sections,
@@ -89,15 +84,14 @@ class TextCollaborationRunner:
         )
         previous_sections.append(config_text)
 
-        final_root_cause = "wrong database port caused database timeout"
         review_text = self._build_text_message(
             stage="review_to_planner",
-            goal="Diagnose a database connection timeout incident",
+            goal=goal,
             current_full_context="The reviewer has received the complete textual history.",
-            log_excerpt="Repeated database timeout and connection pool pressure evidence.",
+            log_excerpt=log_signal,
             previous_facts=(
-                "Fact: the configuration used the wrong database port. "
-                f"Final root cause: {final_root_cause}."
+                f"Fact: the configuration issue is {config_issue}. "
+                f"Final root cause: {expected_root_cause}."
             ),
             next_instruction="Close the incident and document the remediation plan.",
             expected_output=(
@@ -121,7 +115,7 @@ class TextCollaborationRunner:
         protocol_bytes = sum(json_size_bytes(message.to_dict()) for message in messages)
         measured_latency_ms = (time.perf_counter() - started) * 1000.0
         total_latency_ms = measured_latency_ms + (self.baseline_steps * 18.0)
-        root_cause_correct = final_root_cause in review_text.lower()
+        root_cause_correct = expected_root_cause.lower() in review_text.lower()
 
         return CollaborationMetrics(
             mode="text_mode",
@@ -143,6 +137,11 @@ class TextCollaborationRunner:
             saved_steps=0,
             total_latency_ms=total_latency_ms,
             root_cause_correct=root_cause_correct,
+            scenario_family=self._scenario_family(),
+            capability_count=0,
+            capability_discovery_count=0,
+            embedding_state_count=0,
+            embedding_state_bytes=0,
         )
 
     def _build_text_message(
@@ -196,3 +195,31 @@ class TextCollaborationRunner:
             text=text,
             created_at=time.time(),
         )
+
+    def _goal(self) -> str:
+        if self.scenario is None:
+            return "Diagnose a database connection timeout incident"
+        return f"Diagnose a {self.scenario.family} incident for {self.task_topic}"
+
+    def _log_signal(self) -> str:
+        if self.scenario is None:
+            return (
+                "Simulated log summary: database timeout, connection pool exhaustion, "
+                "request failures, and retry confusion."
+            )
+        return f"Observed log pattern: {self.scenario.log_pattern}."
+
+    def _config_issue(self) -> str:
+        if self.scenario is None:
+            return "wrong database port"
+        return self.scenario.config_issue
+
+    def _expected_root_cause(self) -> str:
+        if self.scenario is None:
+            return "wrong database port caused database timeout"
+        return self.scenario.expected_root_cause
+
+    def _scenario_family(self) -> str:
+        if self.scenario is None:
+            return "database_timeout"
+        return self.scenario.family

@@ -7,7 +7,8 @@ python3 benchmarks/bench_collaboration_modes.py \
   --tasks 10 \
   --text-context-bytes 65536 \
   --output results/collaboration_bench.csv \
-  --db-path results/collaboration_bench.sqlite
+  --db-path results/collaboration_bench.sqlite \
+  --scenario-file examples/incident_diagnosis_mock/scenarios.jsonl
 
 sed -n '1,20p' results/collaboration_bench.csv
 

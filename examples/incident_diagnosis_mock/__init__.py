@@ -14,10 +14,18 @@ from .agents import (
     build_review_report_from_state,
     summarize_incident,
 )
+from .scenarios import (
+    IncidentScenario,
+    default_scenarios,
+    load_scenarios,
+    scenario_to_config_text,
+    scenario_to_log_bytes,
+)
 
 __all__ = [
     "AdaptiveTransportPolicy",
     "ConfigAgent",
+    "IncidentScenario",
     "LogAgent",
     "PlannerAgent",
     "ReviewAgent",
@@ -27,5 +35,9 @@ __all__ = [
     "build_mock_config_text",
     "build_mock_log_blob",
     "build_review_report_from_state",
+    "default_scenarios",
+    "load_scenarios",
+    "scenario_to_config_text",
+    "scenario_to_log_bytes",
     "summarize_incident",
 ]

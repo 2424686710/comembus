@@ -53,6 +53,11 @@ class CollaborationMetrics:
     saved_steps: int
     total_latency_ms: float
     root_cause_correct: bool
+    scenario_family: str
+    capability_count: int
+    capability_discovery_count: int
+    embedding_state_count: int
+    embedding_state_bytes: int
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -75,5 +80,9 @@ class CollaborationMetrics:
             "saved_steps": self.saved_steps,
             "total_latency_ms": self.total_latency_ms,
             "root_cause_correct": self.root_cause_correct,
+            "scenario_family": self.scenario_family,
+            "capability_count": self.capability_count,
+            "capability_discovery_count": self.capability_discovery_count,
+            "embedding_state_count": self.embedding_state_count,
+            "embedding_state_bytes": self.embedding_state_bytes,
         }
-

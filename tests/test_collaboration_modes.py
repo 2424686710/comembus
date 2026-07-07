@@ -83,6 +83,9 @@ class CollaborationModesTests(unittest.TestCase):
         self.assertTrue(metrics.root_cause_correct)
         self.assertGreaterEqual(metrics.object_ref_count, 1)
         self.assertGreaterEqual(metrics.state_patch_count, 1)
+        self.assertEqual(metrics.capability_count, 5)
+        self.assertGreaterEqual(metrics.capability_discovery_count, 3)
+        self.assertGreaterEqual(metrics.embedding_state_count, 1)
 
     def test_structured_runner_uses_preloaded_memory(self) -> None:
         board = SharedBlackboard(self.db_path)
@@ -144,10 +147,14 @@ class CollaborationModesTests(unittest.TestCase):
             "saved_steps",
             "total_latency_ms",
             "root_cause_correct",
+            "scenario_family",
+            "capability_count",
+            "capability_discovery_count",
+            "embedding_state_count",
+            "embedding_state_bytes",
         }
         self.assertEqual(set(rows[0].to_dict().keys()), expected_fields)
 
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
-

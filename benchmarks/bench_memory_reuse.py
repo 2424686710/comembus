@@ -16,6 +16,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from comembus.memory.blackboard import SharedBlackboard
+from examples.incident_diagnosis_mock.scenarios import (
+    IncidentScenario,
+    default_scenarios,
+    load_scenarios,
+)
 
 CSV_FIELDS = [
     "task_index",
@@ -72,10 +77,19 @@ def parse_args() -> argparse.Namespace:
         default="results/memory_reuse_bench.sqlite",
         help="SQLite database path",
     )
+    parser.add_argument(
+        "--scenario-file",
+        default="",
+        help="Optional JSONL scenario file. Defaults to built-in rich scenarios.",
+    )
     return parser.parse_args()
 
 
-def benchmark_rows(task_count: int, db_path: str) -> List[MemoryReuseRow]:
+def benchmark_rows(
+    task_count: int,
+    db_path: str,
+    scenario_file: str = "",
+) -> List[MemoryReuseRow]:
     if task_count <= 0:
         raise ValueError("tasks must be positive")
 
@@ -87,44 +101,20 @@ def benchmark_rows(task_count: int, db_path: str) -> List[MemoryReuseRow]:
     board = SharedBlackboard(str(db_file))
     baseline_steps = 5
     rows: List[MemoryReuseRow] = []
+    scenarios = _benchmark_scenarios(task_count, scenario_file)
+    seen_families: set[str] = set()
     try:
-        for task_index in range(1, task_count + 1):
-            task_topic = (
-                "database connection timeout"
-                if task_index == 1
-                else f"similar database connection failure #{task_index}"
-            )
+        for scenario in scenarios:
             started = time.perf_counter()
 
-            if task_index == 1:
-                board.write_memory(
-                    task_id=f"task-{task_index}",
-                    source_agent="log-agent",
-                    task_topic=task_topic,
-                    memory_type="evidence",
-                    summary="database timeout observed in logs",
-                    content="database timeout happened when checkout-api used the wrong port",
-                    tags=["database", "timeout", "port"],
-                    confidence=0.95,
-                    metadata={"task_index": task_index},
-                )
-                strategy = board.write_memory(
-                    task_id=f"task-{task_index}",
-                    source_agent="review-agent",
-                    task_topic=task_topic,
-                    memory_type="strategy",
-                    summary="check wrong port before full scan",
-                    content="If database timeout and wrong port appear together, validate port first and skip full_log_scan.",
-                    tags=["database", "strategy", "port"],
-                    confidence=0.97,
-                    metadata={"task_index": task_index},
-                )
+            if scenario.family not in seen_families:
+                seen_families.add(scenario.family)
                 query_latency_ms = 0.0
                 total_latency_ms = (time.perf_counter() - started) * 1000.0
                 rows.append(
                     MemoryReuseRow(
-                        task_index=task_index,
-                        task_topic=task_topic,
+                        task_index=scenario.task_index,
+                        task_topic=scenario.task_topic,
                         memory_hit=False,
                         reused_memory_id="",
                         baseline_steps=baseline_steps,
@@ -135,22 +125,30 @@ def benchmark_rows(task_count: int, db_path: str) -> List[MemoryReuseRow]:
                         returned_memories=0,
                     )
                 )
-                _write_follow_up_memories(board, task_index, task_topic, strategy.memory_id)
+                _write_follow_up_memories(board, scenario, reused_memory_id="")
                 continue
 
             query_started = time.perf_counter()
-            hits = board.search("database timeout wrong port", tags=["database", "port"], top_k=3)
+            hits = board.search(
+                scenario.related_memory_query,
+                tags=scenario.tags,
+                top_k=3,
+            )
             query_latency_ms = (time.perf_counter() - query_started) * 1000.0
             memory_hit = bool(hits)
             reused_memory_id = hits[0].memory.memory_id if hits else ""
-            structured_steps = 3 if memory_hit else baseline_steps
+            structured_steps = (
+                max(1, baseline_steps - len(scenario.expected_skipped_steps))
+                if memory_hit
+                else baseline_steps
+            )
             saved_steps = baseline_steps - structured_steps
             total_latency_ms = (time.perf_counter() - started) * 1000.0
 
             rows.append(
                 MemoryReuseRow(
-                    task_index=task_index,
-                    task_topic=task_topic,
+                    task_index=scenario.task_index,
+                    task_topic=scenario.task_topic,
                     memory_hit=memory_hit,
                     reused_memory_id=reused_memory_id,
                     baseline_steps=baseline_steps,
@@ -161,7 +159,7 @@ def benchmark_rows(task_count: int, db_path: str) -> List[MemoryReuseRow]:
                     returned_memories=len(hits),
                 )
             )
-            _write_follow_up_memories(board, task_index, task_topic, reused_memory_id)
+            _write_follow_up_memories(board, scenario, reused_memory_id)
         return rows
     finally:
         board.close()
@@ -169,25 +167,51 @@ def benchmark_rows(task_count: int, db_path: str) -> List[MemoryReuseRow]:
 
 def _write_follow_up_memories(
     board: SharedBlackboard,
-    task_index: int,
-    task_topic: str,
+    scenario: IncidentScenario,
     reused_memory_id: str,
 ) -> None:
     board.write_memory(
-        task_id=f"task-{task_index}",
-        source_agent="review-agent",
-        task_topic=task_topic,
-        memory_type="summary",
-        summary=f"database timeout summary for task {task_index}",
+        task_id=f"task-{scenario.task_index}",
+        source_agent="log-agent",
+        task_topic=scenario.task_topic,
+        memory_type="evidence",
+        summary=f"{scenario.family} log evidence for task {scenario.task_index}",
         content=(
-            "database timeout analysis reused prior wrong port diagnosis"
-            if reused_memory_id
-            else "database timeout analysis established the first wrong port memory"
+            f"log_pattern={scenario.log_pattern}; "
+            f"related_memory_query={scenario.related_memory_query}; "
+            f"expected_root_cause={scenario.expected_root_cause}"
         ),
-        tags=["database", "summary", "timeout"],
-        confidence=0.9,
-        metadata={"reused_memory_id": reused_memory_id},
+        tags=list(scenario.tags),
+        confidence=0.94,
+        metadata={"family": scenario.family, "reused_memory_id": reused_memory_id},
     )
+    board.write_memory(
+        task_id=f"task-{scenario.task_index}",
+        source_agent="review-agent",
+        task_topic=scenario.task_topic,
+        memory_type="strategy",
+        summary=f"{scenario.family} reuse strategy",
+        content=(
+            "reuse prior diagnosis and skip repeated steps"
+            if reused_memory_id
+            else "establish the first family memory for later reuse"
+        ),
+        tags=list(scenario.tags) + ["strategy"],
+        confidence=0.9,
+        metadata={
+            "reused_memory_id": reused_memory_id,
+            "expected_skipped_steps": list(scenario.expected_skipped_steps),
+        },
+    )
+
+
+def _benchmark_scenarios(task_count: int, scenario_file: str) -> List[IncidentScenario]:
+    scenarios = load_scenarios(scenario_file) if scenario_file else default_scenarios()
+    if task_count > len(scenarios):
+        raise ValueError(
+            f"requested {task_count} tasks but only {len(scenarios)} scenarios are available"
+        )
+    return scenarios[:task_count]
 
 
 def write_results(path: str, rows: Iterable[MemoryReuseRow]) -> None:
@@ -211,7 +235,11 @@ def print_summary(path: str, rows: List[MemoryReuseRow]) -> None:
 def main() -> int:
     args = parse_args()
     try:
-        rows = benchmark_rows(task_count=args.tasks, db_path=args.db_path)
+        rows = benchmark_rows(
+            task_count=args.tasks,
+            db_path=args.db_path,
+            scenario_file=args.scenario_file,
+        )
     except Exception as exc:
         print(f"memory reuse benchmark failed: {exc}", file=sys.stderr)
         return 1
@@ -223,4 +251,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

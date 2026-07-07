@@ -6,7 +6,8 @@ mkdir -p results
 python3 benchmarks/bench_memory_reuse.py \
   --tasks 10 \
   --output results/memory_reuse_bench.csv \
-  --db-path results/memory_reuse_bench.sqlite
+  --db-path results/memory_reuse_bench.sqlite \
+  --scenario-file examples/incident_diagnosis_mock/scenarios.jsonl
 
 sed -n '1,20p' results/memory_reuse_bench.csv
 

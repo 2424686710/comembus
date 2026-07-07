@@ -16,6 +16,11 @@ if str(ROOT) not in sys.path:
 from comembus.collab.metrics import CollaborationMetrics
 from comembus.collab.structured_mode import StructuredCollaborationRunner
 from comembus.collab.text_mode import TextCollaborationRunner
+from examples.incident_diagnosis_mock.scenarios import (
+    IncidentScenario,
+    default_scenarios,
+    load_scenarios,
+)
 
 CSV_FIELDS = [
     "mode",
@@ -37,6 +42,11 @@ CSV_FIELDS = [
     "saved_steps",
     "total_latency_ms",
     "root_cause_correct",
+    "scenario_family",
+    "capability_count",
+    "capability_discovery_count",
+    "embedding_state_count",
+    "embedding_state_bytes",
 ]
 
 
@@ -59,6 +69,11 @@ def parse_args() -> argparse.Namespace:
         default="results/collaboration_bench.sqlite",
         help="SQLite database path for structured_mode memory reuse",
     )
+    parser.add_argument(
+        "--scenario-file",
+        default="",
+        help="Optional JSONL scenario file. Defaults to built-in rich scenarios.",
+    )
     return parser.parse_args()
 
 
@@ -66,6 +81,7 @@ def benchmark_rows(
     task_count: int,
     text_context_bytes: int,
     db_path: str,
+    scenario_file: str = "",
 ) -> List[CollaborationMetrics]:
     if task_count <= 0:
         raise ValueError("tasks must be positive")
@@ -78,15 +94,15 @@ def benchmark_rows(
         db_file.unlink()
 
     rows: List[CollaborationMetrics] = []
-    for task_index in range(1, task_count + 1):
-        if task_index == 1:
-            task_topic = "database connection timeout"
-        else:
-            task_topic = f"similar database connection failure #{task_index}"
+    scenarios = _benchmark_scenarios(task_count, scenario_file)
+    for scenario in scenarios:
+        task_index = scenario.task_index
+        task_topic = scenario.task_topic
 
         text_metrics = TextCollaborationRunner(
             task_index=task_index,
             task_topic=task_topic,
+            scenario=scenario,
             text_context_bytes=text_context_bytes,
         ).run()
         rows.append(text_metrics)
@@ -95,6 +111,7 @@ def benchmark_rows(
             task_index=task_index,
             task_topic=task_topic,
             db_path=str(db_file),
+            scenario=scenario,
         ).run()
         rows.append(structured_metrics)
     return rows
@@ -122,6 +139,15 @@ def print_summary(path: str, rows: List[CollaborationMetrics]) -> None:
     print(f"wrote {len(rows)} benchmark rows to {path}")
 
 
+def _benchmark_scenarios(task_count: int, scenario_file: str) -> List[IncidentScenario]:
+    scenarios = load_scenarios(scenario_file) if scenario_file else default_scenarios()
+    if task_count > len(scenarios):
+        raise ValueError(
+            f"requested {task_count} tasks but only {len(scenarios)} scenarios are available"
+        )
+    return scenarios[:task_count]
+
+
 def main() -> int:
     args = parse_args()
     try:
@@ -129,6 +155,7 @@ def main() -> int:
             task_count=args.tasks,
             text_context_bytes=args.text_context_bytes,
             db_path=args.db_path,
+            scenario_file=args.scenario_file,
         )
     except Exception as exc:
         print(f"collaboration benchmark failed: {exc}", file=sys.stderr)
@@ -141,4 +168,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
