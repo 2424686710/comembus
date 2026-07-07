@@ -381,6 +381,84 @@ v0.8 新增的 `EmbeddingState` / `EmbeddingRef` 解决的是这个问题：
 
 这仍然不是完整比赛系统，但已经足以支撑一个可运行、可测试、可对比、可汇总的阶段性实验平台。
 
+## 为什么 LLM Agent 是 Optional
+
+v0.9 引入了一个可选的 `comembus.llm` 适配层，但它被刻意设计成 optional，而不是核心依赖。
+
+原因有四个：
+
+1. 当前 CoMemBus 的主目标仍然是可复现的 AI Infra MVP，而不是在线模型服务平台。
+2. 比赛环境和 openEuler 复现实验必须在“没有网络、没有 API Key、没有第三方 SDK”的前提下稳定运行。
+3. 外部 LLM 服务会引入额外的失败面，例如网络不可达、接口兼容性问题、延迟抖动和配额问题。
+4. 现有 benchmark、mock demo、state patch、shared blackboard 和 capability discovery 都已经可以独立验证核心设计价值。
+
+所以当前策略是：
+
+- 默认 provider=`mock`
+- `local_http` 只是附加能力
+- 一旦 LLM 调用失败，必须自动 fallback 到 `mock`
+- `run_all.sh` 不把 LLM demo 当作默认链路
+
+这使得 optional LLM integration 更像一个“上层可插拔增强层”，而不是核心运行时前提。
+
+## LLM Agent 如何复用结构化状态和共享记忆
+
+`LLMReviewAgent` 并不直接读取原始大日志对象，也不参与 UDS / Shared Memory 传输本身。它复用的是已经压缩后的上层状态：
+
+- `TaskState.facts`
+- `StatePatch` 应用后的阶段信息
+- `SharedBlackboard` 返回的记忆摘要
+- 少量 evidence 行
+
+这种接法很关键，因为它说明 LLM agent 的位置是在现有 CoMemBus 上层：
+
+1. 低开销通信仍由 UDS + Shared Memory 完成
+2. 状态传递仍由 `TaskState` + `StatePatch` 完成
+3. 历史经验复用仍由 `SharedBlackboard` 完成
+4. LLM 只是消费压缩后的结构化上下文，生成更自然的计划或报告
+
+换句话说，LLM adapter 不应取代 CoMemBus 的核心机制，而应建立在它们之上。
+
+## 为什么不把完整日志塞给 LLM
+
+这一点和赛题目标高度一致。
+
+完整 8MB 日志对象之所以被放进 Shared Memory，而不是直接走文本协议，就是为了避免：
+
+- 重复复制
+- 大上下文传输
+- 高 token 开销
+- 无法稳定复现实验
+
+如果接了 LLM 又把原始 8MB 日志重新塞回 prompt，就会抵消 structured_mode 的很多收益。因此 `LLMReviewAgent` 当前只允许使用：
+
+- 已提炼出的 facts
+- 记忆摘要
+- 少量 evidence
+
+这让 optional LLM integration 继续保持“控制面轻量、数据面分层、上下文压缩”的设计原则。
+
+## LLM 接入与 AI Infra 的关系
+
+从系统边界上看，CoMemBus 到 v0.9 的分层大致如下：
+
+- Infra 层：
+  UDS、Shared Memory、ObjectRef、AdaptiveTransportPolicy
+- State / Memory 层：
+  `TaskState`、`StatePatch`、`SharedBlackboard`、Capability Discovery、Embedding Direct Exchange
+- Experiment / Agent 层：
+  mock agents、rich scenarios、benchmarks
+- Optional AI Layer：
+  `MockLLMClient`、`LocalHTTPChatClient`、`LLMReviewAgent`
+
+这种分层关系意味着：
+
+- 即使完全不接 LLM，CoMemBus 也已经是一个可运行的 AI Infra MVP
+- 接入 LLM 后，系统得到的是“更自然的计划/报告能力”，不是“核心通信才终于成立”
+- 默认 mock provider 保证了系统的基础可验证性
+
+这也解释了为什么当前项目不推荐把在线 API 作为比赛默认依赖：CoMemBus 的主价值在于可控、低开销、结构化、可复现的协作基础设施。
+
 为了证明这套黑板不只是“能存”，仓库新增了两个验证入口：
 
 - `examples/incident_diagnosis_mock/run_memory_reuse_demo.py`
