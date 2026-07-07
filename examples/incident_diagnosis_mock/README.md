@@ -4,10 +4,10 @@
 
 ## 参与 Agent
 
-- `PlannerAgent`：发布诊断任务，并给日志任务和配置任务打上选择的传输模式说明。
-- `LogAgent`：通过 `ObjectRef` 读取至少 8MB 的共享内存日志，提取日志事实。
-- `ConfigAgent`：读取小配置文本，提取配置事实。
-- `ReviewAgent`：汇总 `log_facts` 和 `config_facts`，输出最终 root cause 报告。
+- `PlannerAgent`：创建初始 `TaskState` 并发布给主流程。
+- `LogAgent`：通过 `ObjectRef` 读取至少 8MB 的共享内存日志，并生成 `StatePatch`。
+- `ConfigAgent`：读取小配置文本，并生成 `StatePatch`。
+- `ReviewAgent`：读取最终 `TaskState`，输出最终 root cause 报告。
 
 ## 为什么这个 demo 有意义
 
@@ -16,6 +16,7 @@
 - 控制消息依旧走 UDS。
 - 大日志对象依旧只通过 `ObjectRef` 传递，不走 UDS 全量复制。
 - 多个 agent 通过 topic 串起一个简化的工作流。
+- 状态交接通过 `TaskState` + `StatePatch` 完成，而不是只传零散结果。
 - 最终结果由单独的 review agent 生成，说明 bus 能支撑分工式协作。
 
 ## 运行方式
@@ -29,4 +30,3 @@ python3 examples/incident_diagnosis_mock/run_demo.py
 ```text
 OK: mock multi-agent incident diagnosis completed
 ```
-

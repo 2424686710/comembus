@@ -16,13 +16,22 @@ if str(ROOT) not in sys.path:
 from comembus.client import AgentBusClient
 from comembus.object_store.shm_store import ObjectStoreError
 from comembus.server import AgentBusServer
+from comembus.state.manager import InMemoryStateManager
+from comembus.state.patch import StatePatch
+from comembus.state.task_state import TaskState
 from examples.incident_diagnosis_mock.agents import (
-    DEFAULT_LOG_SIZE_BYTES,
-    PlannerAgent,
-    LogAgent,
-    ConfigAgent,
-    ReviewAgent,
+    CONFIG_PATCHES_TOPIC,
+    INITIAL_STATE_TOPIC,
+    LOG_PATCHES_TOPIC,
     REVIEW_REPORTS_TOPIC,
+    REVIEW_TASKS_TOPIC,
+    TASKS_CONFIG_TOPIC,
+    TASKS_LOG_TOPIC,
+    ConfigAgent,
+    DEFAULT_LOG_SIZE_BYTES,
+    LogAgent,
+    PlannerAgent,
+    ReviewAgent,
     build_mock_config_text,
     build_mock_log_blob,
     start_agent_process,
@@ -57,6 +66,7 @@ def main() -> int:
     coordinator = None
     processes: List = []
     log_ref = None
+    state_manager = InMemoryStateManager()
 
     try:
         server.start()
@@ -91,6 +101,72 @@ def main() -> int:
             ),
         ]
 
+        planner_message = wait_for_topic_message(
+            coordinator,
+            INITIAL_STATE_TOPIC,
+            timeout_seconds=15.0,
+        )
+        initial_state = TaskState.from_dict(planner_message["task_state"])
+        state_manager.create_state(initial_state)
+        print(
+            f"[Coordinator] initial state version={initial_state.version} "
+            f"task_id={initial_state.task_id}",
+            flush=True,
+        )
+
+        log_task_state = state_manager.snapshot(initial_state.task_id)
+        coordinator.publish(
+            TASKS_LOG_TOPIC,
+            {
+                "task_state": log_task_state.to_dict(),
+                "object_ref": planner_message["object_ref"],
+            },
+        )
+        log_patch_message = wait_for_topic_message(
+            coordinator,
+            LOG_PATCHES_TOPIC,
+            timeout_seconds=15.0,
+        )
+        log_patch = StatePatch.from_dict(log_patch_message["state_patch"])
+        print(
+            f"[Coordinator] applying log patch expected_version={log_patch.expected_version}",
+            flush=True,
+        )
+        state_after_log = state_manager.apply_patch(log_patch)
+        print(
+            f"[Coordinator] new state version after apply={state_after_log.version}",
+            flush=True,
+        )
+
+        config_task_state = state_manager.snapshot(initial_state.task_id)
+        coordinator.publish(
+            TASKS_CONFIG_TOPIC,
+            {
+                "task_state": config_task_state.to_dict(),
+                "config_text": planner_message["config_text"],
+            },
+        )
+        config_patch_message = wait_for_topic_message(
+            coordinator,
+            CONFIG_PATCHES_TOPIC,
+            timeout_seconds=15.0,
+        )
+        config_patch = StatePatch.from_dict(config_patch_message["state_patch"])
+        print(
+            f"[Coordinator] applying config patch expected_version={config_patch.expected_version}",
+            flush=True,
+        )
+        final_state = state_manager.apply_patch(config_patch)
+        print(
+            f"[Coordinator] new state version after apply={final_state.version}",
+            flush=True,
+        )
+        print(f"[Coordinator] final facts={final_state.facts}", flush=True)
+
+        coordinator.publish(
+            REVIEW_TASKS_TOPIC,
+            {"task_state": final_state.to_dict()},
+        )
         report = wait_for_topic_message(
             coordinator,
             REVIEW_REPORTS_TOPIC,

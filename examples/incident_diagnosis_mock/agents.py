@@ -15,13 +15,17 @@ if str(ROOT) not in sys.path:
 
 from comembus.client import AgentBusClient
 from comembus.protocol import ObjectRef
+from comembus.state.patch import StatePatch, apply_patch
+from comembus.state.task_state import TaskState
 from comembus.transport.adaptive import AdaptiveTransportPolicy
 
 
+INITIAL_STATE_TOPIC = "incident_initial_state"
 TASKS_LOG_TOPIC = "incident_tasks_log"
 TASKS_CONFIG_TOPIC = "incident_tasks_config"
-LOG_FACTS_TOPIC = "incident_log_facts"
-CONFIG_FACTS_TOPIC = "incident_config_facts"
+LOG_PATCHES_TOPIC = "incident_log_patches"
+CONFIG_PATCHES_TOPIC = "incident_config_patches"
+REVIEW_TASKS_TOPIC = "incident_review_tasks"
 REVIEW_REPORTS_TOPIC = "incident_review_reports"
 
 DEFAULT_LOG_SIZE_BYTES = 8 * 1024 * 1024
@@ -117,24 +121,85 @@ def analyze_config_text(config_text: str, incident_id: str) -> Dict[str, Any]:
     }
 
 
-def synthesize_root_cause(
-    incident_id: str,
-    log_facts: Dict[str, Any],
-    config_facts: Dict[str, Any],
-) -> Dict[str, Any]:
-    if log_facts.get("incident_id") != incident_id:
-        raise ValueError("log_facts incident_id does not match")
-    if config_facts.get("incident_id") != incident_id:
-        raise ValueError("config_facts incident_id does not match")
+def build_initial_task_state(task_id: str, goal: str, log_ref_dict: Dict[str, Any]) -> TaskState:
+    return TaskState(
+        task_id=task_id,
+        version=1,
+        goal=goal,
+        phase="planning",
+        completed_steps=[],
+        pending_steps=["log_analysis", "config_check", "review"],
+        facts={},
+        errors=[],
+        artifacts={
+            "log_bundle": {
+                "kind": "object_ref",
+                "object_ref": dict(log_ref_dict),
+            }
+        },
+    )
 
-    pool_size = int(config_facts.get("pool_size", 0))
-    timeout_count = int(log_facts.get("database_timeout_count", 0))
-    pool_exhausted_count = int(log_facts.get("pool_exhausted_count", 0))
 
-    if pool_exhausted_count > 0 and timeout_count > 0 and 0 < pool_size <= 4:
+def build_log_state_patch(state: TaskState, log_analysis: Dict[str, Any]) -> StatePatch:
+    incident_id = str(log_analysis["incident_id"])
+    return StatePatch(
+        task_id=state.task_id,
+        expected_version=state.version,
+        set_fields={
+            "phase": "log_analysis_complete",
+            "pending_steps": ["config_check", "review"],
+        },
+        append_fields={"completed_steps": ["log_analysis"]},
+        merge_dict_fields={
+            "facts": {
+                "incident_id": incident_id,
+                "log_error": "database timeout",
+                "log_signal": "connection pool exhausted",
+                "log_component": str(log_analysis["suspected_component"]),
+                "log_timeout_count": str(log_analysis["database_timeout_count"]),
+                "log_pool_exhausted_count": str(log_analysis["pool_exhausted_count"]),
+                "log_summary": str(log_analysis["summary"]),
+            }
+        },
+    )
+
+
+def build_config_state_patch(
+    state: TaskState,
+    config_analysis: Dict[str, Any],
+) -> StatePatch:
+    issue = "database pool too small"
+    if str(config_analysis["config_risk"]) != "database_pool_too_small":
+        issue = "no clear config issue"
+    return StatePatch(
+        task_id=state.task_id,
+        expected_version=state.version,
+        set_fields={
+            "phase": "review_ready",
+            "pending_steps": ["review"],
+        },
+        append_fields={"completed_steps": ["config_check"]},
+        merge_dict_fields={
+            "facts": {
+                "config_issue": issue,
+                "config_service": str(config_analysis["service_name"]),
+                "config_pool_size": str(config_analysis["pool_size"]),
+                "config_timeout_ms": str(config_analysis["timeout_ms"]),
+                "config_summary": str(config_analysis["summary"]),
+            }
+        },
+    )
+
+
+def build_review_report_from_state(state: TaskState) -> Dict[str, Any]:
+    log_error = state.facts.get("log_error", "").lower()
+    config_issue = state.facts.get("config_issue", "").lower()
+    config_pool_size = state.facts.get("config_pool_size", "unknown")
+
+    if "database timeout" in log_error and "pool too small" in config_issue:
         root_cause = (
             "Checkout failures were caused by database connection pool saturation "
-            f"with pool_size={pool_size}."
+            f"with pool_size={config_pool_size}."
         )
         confidence = "high"
         remediation = (
@@ -146,22 +211,32 @@ def synthesize_root_cause(
         remediation = "Collect more logs and configuration state before taking action."
 
     return {
-        "incident_id": incident_id,
-        "service_name": config_facts.get("service_name", "unknown"),
+        "incident_id": state.task_id,
+        "service_name": state.facts.get("config_service", "unknown"),
         "root_cause": root_cause,
         "confidence": confidence,
         "evidence": [
-            log_facts.get("summary", ""),
-            config_facts.get("summary", ""),
+            state.facts.get("log_summary", ""),
+            state.facts.get("config_summary", ""),
         ],
         "recommended_action": remediation,
+        "state_version": state.version,
     }
 
 
 def summarize_incident(incident_id: str, log_blob: bytes, config_text: str) -> Dict[str, Any]:
-    log_facts = analyze_log_blob(log_blob, incident_id)
-    config_facts = analyze_config_text(config_text, incident_id)
-    return synthesize_root_cause(incident_id, log_facts, config_facts)
+    initial_state = build_initial_task_state(
+        task_id=incident_id,
+        goal="Diagnose checkout failures from logs and config",
+        log_ref_dict={"object_id": "mock", "shm_name": "mock", "size": len(log_blob)},
+    )
+    log_patch = build_log_state_patch(initial_state, analyze_log_blob(log_blob, incident_id))
+    after_log = apply_patch(initial_state, log_patch)
+    config_patch = build_config_state_patch(
+        after_log, analyze_config_text(config_text, incident_id)
+    )
+    final_state = apply_patch(after_log, config_patch)
+    return build_review_report_from_state(final_state)
 
 
 def wait_for_topic_message(
@@ -204,28 +279,27 @@ class PlannerAgent:
                 size_bytes=len(self.config_text.encode("utf-8")),
                 receivers=1,
             )
+            state = build_initial_task_state(
+                task_id=self.incident_id,
+                goal="Diagnose checkout failures from logs and config",
+                log_ref_dict=self.log_ref_dict,
+            )
             log_agent_message(
                 "PlannerAgent",
-                f"publishing incident {self.incident_id} with log transport={log_mode} "
-                f"and config transport={config_mode}",
+                f"created initial state version={state.version} "
+                f"with log transport={log_mode} and config transport={config_mode}",
             )
             client.publish(
-                TASKS_LOG_TOPIC,
+                INITIAL_STATE_TOPIC,
                 {
-                    "incident_id": self.incident_id,
+                    "task_state": state.to_dict(),
                     "object_ref": dict(self.log_ref_dict),
-                    "selected_mode": log_mode,
-                },
-            )
-            client.publish(
-                TASKS_CONFIG_TOPIC,
-                {
-                    "incident_id": self.incident_id,
                     "config_text": self.config_text,
-                    "selected_mode": config_mode,
+                    "selected_mode_log": log_mode,
+                    "selected_mode_config": config_mode,
                 },
             )
-            log_agent_message("PlannerAgent", "task publication complete")
+            log_agent_message("PlannerAgent", "initial TaskState published")
         finally:
             client.close()
 
@@ -241,20 +315,21 @@ class LogAgent:
             client.register("log-agent")
             log_agent_message("LogAgent", "waiting for log analysis task")
             task = wait_for_topic_message(client, TASKS_LOG_TOPIC, timeout_seconds=self.timeout)
-            incident_id = str(task["incident_id"])
+            state = TaskState.from_dict(task["task_state"])
             ref = ObjectRef.from_dict(task["object_ref"])
             log_agent_message(
                 "LogAgent",
-                f"received ObjectRef for incident {incident_id}, size={ref.size} bytes",
+                f"received task_state version={state.version} and ObjectRef size={ref.size}",
             )
             data = client.object_store.get_bytes(ref)
-            facts = analyze_log_blob(data, incident_id)
-            client.publish(LOG_FACTS_TOPIC, facts)
+            analysis = analyze_log_blob(data, state.task_id)
+            patch = build_log_state_patch(state, analysis)
             log_agent_message(
                 "LogAgent",
-                "published log_facts with "
-                f"database_timeout_count={facts['database_timeout_count']}",
+                f"generated patch expected_version={patch.expected_version}",
             )
+            client.publish(LOG_PATCHES_TOPIC, {"state_patch": patch.to_dict()})
+            log_agent_message("LogAgent", "published state patch for log analysis")
         finally:
             client.close()
 
@@ -272,14 +347,16 @@ class ConfigAgent:
             task = wait_for_topic_message(
                 client, TASKS_CONFIG_TOPIC, timeout_seconds=self.timeout
             )
-            incident_id = str(task["incident_id"])
+            state = TaskState.from_dict(task["task_state"])
             config_text = str(task["config_text"])
-            facts = analyze_config_text(config_text, incident_id)
-            client.publish(CONFIG_FACTS_TOPIC, facts)
+            analysis = analyze_config_text(config_text, state.task_id)
+            patch = build_config_state_patch(state, analysis)
             log_agent_message(
                 "ConfigAgent",
-                f"published config_facts with pool_size={facts['pool_size']}",
+                f"generated patch expected_version={patch.expected_version}",
             )
+            client.publish(CONFIG_PATCHES_TOPIC, {"state_patch": patch.to_dict()})
+            log_agent_message("ConfigAgent", "published state patch for config analysis")
         finally:
             client.close()
 
@@ -293,21 +370,18 @@ class ReviewAgent:
         client = AgentBusClient(self.socket_path, timeout=self.timeout)
         try:
             client.register("review-agent")
-            log_agent_message("ReviewAgent", "waiting for log_facts and config_facts")
-            log_facts = wait_for_topic_message(
-                client, LOG_FACTS_TOPIC, timeout_seconds=self.timeout
+            log_agent_message("ReviewAgent", "waiting for final TaskState")
+            task = wait_for_topic_message(client, REVIEW_TASKS_TOPIC, timeout_seconds=self.timeout)
+            state = TaskState.from_dict(task["task_state"])
+            log_agent_message(
+                "ReviewAgent",
+                f"received final TaskState version={state.version} facts={state.facts}",
             )
-            config_facts = wait_for_topic_message(
-                client, CONFIG_FACTS_TOPIC, timeout_seconds=self.timeout
-            )
-            incident_id = str(log_facts["incident_id"])
-            if str(config_facts["incident_id"]) != incident_id:
-                raise ValueError("review agent received mismatched incident facts")
-            report = synthesize_root_cause(incident_id, log_facts, config_facts)
+            report = build_review_report_from_state(state)
             client.publish(REVIEW_REPORTS_TOPIC, report)
             log_agent_message(
                 "ReviewAgent",
-                f"published final review report for incident {incident_id}",
+                f"published final review report for task {state.task_id}",
             )
         finally:
             client.close()

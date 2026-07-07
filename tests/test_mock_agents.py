@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import unittest
 
+from comembus.state.patch import apply_patch
 from examples.incident_diagnosis_mock.agents import (
     DEFAULT_LOG_SIZE_BYTES,
     analyze_config_text,
     analyze_log_blob,
+    build_config_state_patch,
+    build_initial_task_state,
+    build_log_state_patch,
     build_mock_config_text,
     build_mock_log_blob,
+    build_review_report_from_state,
     summarize_incident,
 )
 
@@ -49,7 +54,53 @@ class MockAgentHelperTests(unittest.TestCase):
         self.assertIn("database connection pool saturation", report["root_cause"].lower())
         self.assertIn("Increase database.pool_size", report["recommended_action"])
 
+    def test_log_patch_applies_to_initial_task_state(self) -> None:
+        state = build_initial_task_state(
+            task_id="INC-4",
+            goal="Diagnose checkout failures",
+            log_ref_dict={"object_id": "obj-1", "shm_name": "shm-1", "size": 8388608},
+        )
+        patch = build_log_state_patch(
+            state,
+            analyze_log_blob(build_mock_log_blob(DEFAULT_LOG_SIZE_BYTES), "INC-4"),
+        )
+
+        updated = apply_patch(state, patch)
+
+        self.assertEqual(patch.expected_version, 1)
+        self.assertEqual(updated.version, 2)
+        self.assertEqual(updated.phase, "log_analysis_complete")
+        self.assertIn("log_analysis", updated.completed_steps)
+        self.assertEqual(updated.facts["log_error"], "database timeout")
+
+    def test_config_patch_applies_after_log_patch(self) -> None:
+        state = build_initial_task_state(
+            task_id="INC-5",
+            goal="Diagnose checkout failures",
+            log_ref_dict={"object_id": "obj-1", "shm_name": "shm-1", "size": 8388608},
+        )
+        log_state = apply_patch(
+            state,
+            build_log_state_patch(
+                state,
+                analyze_log_blob(build_mock_log_blob(DEFAULT_LOG_SIZE_BYTES), "INC-5"),
+            ),
+        )
+        config_patch = build_config_state_patch(
+            log_state,
+            analyze_config_text(build_mock_config_text(), "INC-5"),
+        )
+
+        final_state = apply_patch(log_state, config_patch)
+        report = build_review_report_from_state(final_state)
+
+        self.assertEqual(config_patch.expected_version, 2)
+        self.assertEqual(final_state.version, 3)
+        self.assertEqual(final_state.phase, "review_ready")
+        self.assertIn("config_check", final_state.completed_steps)
+        self.assertEqual(final_state.facts["config_issue"], "database pool too small")
+        self.assertIn("database connection pool saturation", report["root_cause"].lower())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
-
