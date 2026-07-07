@@ -304,6 +304,90 @@ SharedBlackboard 对应赛题里的“共享记忆机制”这一层能力：
 
 进一步结合起来。
 
+## 纯文本协作模式设计
+
+`text_mode` 是一个明确的基线模式，用来模拟传统多 agent 系统里最常见的问题：每次交接都把完整上下文重新用自然语言或冗长 JSON 描述一遍。
+
+在这个模式里，agent 之间传递的信息通常包含：
+
+- task goal
+- current full context
+- 日志摘要或日志片段
+- 之前已经发现的 facts
+- 下一步指令
+- 期望输出格式
+
+这些内容在多个 agent handoff 中会反复出现，因此即使语义上没有新增多少信息，消息体也会迅速膨胀。v0.7 的 `TextCollaborationRunner` 正是用来稳定复现这种现象的。
+
+## 结构化协议协作模式设计
+
+`structured_mode` 则把协作内容压缩成更明确的协议单元，而不是传整段上下文叙述。
+
+这里复用了仓库里已经实现的能力：
+
+- `AgentCapability`：描述 agent 能力
+- `StructuredMessage`：传递 `action_type`、`params`、`result`
+- `ObjectRef`：传递大日志对象引用
+- `StatePatch`：传递任务状态变化
+- `SharedBlackboard`：传递可复用历史记忆的 `memory_ref`
+
+结构化模式里的几个关键设计点是：
+
+- 大日志通过 Shared Memory 写入一次，然后只传 `ObjectRef`
+- 状态交接通过 `StatePatch` 完成，而不是反复发送完整状态
+- 历史经验通过 `memory_id` 引用，而不是整段历史文本
+
+这样做可以把真正“会反复增长的东西”从消息体中拆出去，让协议层只保留必要的控制信息和摘要。
+
+## 指标设计
+
+为了比较两种模式，v0.7 引入了这些核心指标：
+
+- `message_count`
+- `text_chars`
+- `approx_tokens`
+- `protocol_bytes`
+- `object_ref_count`
+- `state_patch_count`
+- `memory_ref_count`
+- `non_text_state_bytes`
+- `shared_object_bytes`
+- `total_latency_ms`
+- `memory_hit_rate`
+
+这些指标对应不同层面的开销：
+
+- `message_count`：交接次数
+- `text_chars` / `approx_tokens`：文本上下文负担
+- `protocol_bytes`：真正通过协议发送的字节量
+- `object_ref_count`：是否在复用共享内存而不是直接传大对象
+- `state_patch_count`：是否在用增量状态，而不是 full state
+- `memory_ref_count`：是否在复用历史记忆，而不是重传历史解释
+- `total_latency_ms`：整体协作代价
+- `memory_hit_rate`：共享记忆在关联任务中能否真正命中
+
+## 为什么结构化模式能降低重复上下文和 token 开销
+
+结构化模式更省的核心原因不是“消息更短”这么简单，而是因为它把不同性质的信息分流到了不同机制：
+
+- 大对象走 Shared Memory
+- 状态变化走 StatePatch
+- 历史经验走 SharedBlackboard / MemoryRef
+- 控制消息只保留 action、params、result 和少量摘要
+
+这样一来，重复上下文不再需要在每个 handoff 中重新拼接成一大段文本。对于关联任务来说，随着历史经验逐渐积累，structured mode 还能进一步通过 `memory_hit` 减少步骤数。
+
+## 与赛题评分项的对应关系
+
+这组实验可以直接映射到赛题中的两个关键方向：
+
+- “通信效率 25 分”
+  通过 `text_chars`、`approx_tokens`、`protocol_bytes`、`ObjectRef` / `StatePatch` / `MemoryRef` 次数来说明结构化协议如何降低通信负担。
+- “实验验证 15 分”
+  通过 `bench_collaboration_modes.py` 的可复现 CSV 输出、`token_saving_ratio`、`latency_saving_ratio`、`memory_hit_rate` 和 `total_saved_steps` 来提供可量化证据。
+
+因此，v0.7 不是只新增一个 demo，而是补上了“纯文本协作基线 vs 结构化协议协作”这一组能够直接拿来解释实验效果的数据。
+
 ## 后续扩展方向
 
 后续如果进入比赛完整版本，可以在这个 MVP 上继续扩展：
