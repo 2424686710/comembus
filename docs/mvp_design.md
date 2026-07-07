@@ -135,6 +135,55 @@ v0.4 新增了一个不依赖 LLM、LangChain 或外部服务的 mock 多 Agent 
 
 但它已经足够用来说明 CoMemBus 的通信抽象，能够支撑“多个 agent 分工协作 + 大对象共享”的比赛方向。
 
+## StatePatch 状态传递机制
+
+v0.5 新增了 `comembus.state`，用于表达“完整状态”和“增量状态变化”之间的区别。
+
+核心对象有三个：
+
+- `TaskState`：任务在某一时刻的完整状态快照。
+- `StatePatch`：只描述这次交接发生了哪些变化。
+- `InMemoryStateManager`：一个最小的版本化状态管理器，用来创建、读取、打补丁和做快照。
+
+`TaskState` 适合表达完整上下文，例如：
+
+- 当前目标是什么
+- 当前 phase 在哪里
+- 已完成步骤和待办步骤是什么
+- 目前掌握了哪些 facts
+- 产生了哪些 artifacts
+
+但在多 Agent 协作里，很多时候一次交接只会发生很小的变化，例如：
+
+- `phase` 从 `collecting` 变成 `reviewing`
+- `completed_steps` 新增 1 项
+- `facts` 里新加入 1 条观察
+
+如果每次都把完整状态重发一遍，尤其是在 facts 越积越多的时候，控制面负载会越来越大。`StatePatch` 的价值就在这里：
+
+- `set_fields`：适合覆盖单值字段，例如 `phase`
+- `append_fields`：适合向步骤列表或错误列表追加内容
+- `merge_dict_fields`：适合把新的 facts 或 artifacts 合并进已有状态
+
+补丁还带有 `expected_version`。这意味着：
+
+- 发送方知道自己是基于哪个版本做修改
+- 接收方在应用前可以校验版本
+- 如果版本不一致，直接抛出 `VersionConflictError`
+
+这样做的收益有两个：
+
+1. 节省字节数。很多场景下一个 patch 会远小于完整 `TaskState` JSON。
+2. 提前暴露并发冲突。多个 agent 同时更新同一个任务时，不会悄悄覆盖彼此的结果。
+
+当前版本只实现了内存态的最小闭环，不引入 SQLite 或分布式一致性组件，但已经足以证明“多 Agent 状态交接传 patch 比传 full state 更低开销”这一点。`benchmarks/bench_state_patch.py` 会构造 `small`、`medium`、`large` 三种状态规模，对比：
+
+- 完整状态重发需要多少字节
+- 同等语义的 `StatePatch` 需要多少字节
+- 两者之间的缩减比例是多少
+
+这为后续把 StatePatch 放进真实 agent workflow、共享黑板或更复杂的状态同步层提供了直接基础。
+
 ## 后续扩展方向
 
 后续如果进入比赛完整版本，可以在这个 MVP 上继续扩展：
