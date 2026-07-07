@@ -23,10 +23,16 @@ from comembus.client import AgentBusClient
 from comembus.protocol import Message, ObjectRef, encode_frame
 import comembus.protocol as protocol_module
 from comembus.server import AgentBusServer
+from comembus.transport.adaptive import (
+    AdaptiveTransportPolicy,
+    DIRECT_UDS,
+    SHM_REF,
+)
 
 
 CSV_FIELDS = [
     "mode",
+    "selected_mode",
     "size_bytes",
     "receivers",
     "round",
@@ -40,6 +46,7 @@ CSV_FIELDS = [
 @dataclass(frozen=True)
 class BenchmarkResult:
     mode: str
+    selected_mode: str
     size_bytes: int
     receivers: int
     round: int
@@ -51,6 +58,7 @@ class BenchmarkResult:
     def to_csv_row(self) -> dict[str, object]:
         return {
             "mode": self.mode,
+            "selected_mode": self.selected_mode,
             "size_bytes": self.size_bytes,
             "receivers": self.receivers,
             "round": self.round,
@@ -84,6 +92,11 @@ def parse_args() -> argparse.Namespace:
         default="results/transport_bench.csv",
         help="CSV output path",
     )
+    parser.add_argument(
+        "--modes",
+        default="direct_uds,shm_ref,adaptive",
+        help="Comma-separated benchmark modes, for example: direct_uds,shm_ref,adaptive",
+    )
     return parser.parse_args()
 
 
@@ -102,6 +115,15 @@ def parse_receivers(spec: str) -> List[int]:
             raise ValueError("receiver count must be positive")
         receivers.append(value)
     return receivers
+
+
+def parse_modes(spec: str) -> List[str]:
+    allowed = {DIRECT_UDS, SHM_REF, "adaptive"}
+    modes = split_csv(spec)
+    for mode in modes:
+        if mode not in allowed:
+            raise ValueError(f"unsupported mode: {mode}")
+    return modes
 
 
 def split_csv(spec: str) -> List[str]:
@@ -168,13 +190,18 @@ def topic_names(receiver_count: int) -> List[str]:
 
 
 class BenchmarkHarness:
-    def __init__(self, max_receivers: int) -> None:
+    def __init__(
+        self,
+        max_receivers: int,
+        adaptive_policy: AdaptiveTransportPolicy | None = None,
+    ) -> None:
         self._tempdir = tempfile.TemporaryDirectory(prefix="comembus-bench-")
         self.socket_path = os.path.join(self._tempdir.name, "comembus.sock")
         self.server = AgentBusServer(self.socket_path)
         self.producer: AgentBusClient | None = None
         self.receivers: List[AgentBusClient] = []
         self.max_receivers = max_receivers
+        self.adaptive_policy = adaptive_policy or AdaptiveTransportPolicy()
 
     def __enter__(self) -> "BenchmarkHarness":
         self.server.start()
@@ -197,6 +224,7 @@ class BenchmarkHarness:
 
     def run_direct_round(
         self,
+        mode: str,
         size_bytes: int,
         receiver_count: int,
         round_index: int,
@@ -226,7 +254,8 @@ class BenchmarkHarness:
             payload_frame_bytes(topic, payload) for topic in topic_names(receiver_count)
         )
         return BenchmarkResult(
-            mode="direct_uds",
+            mode=mode,
+            selected_mode=DIRECT_UDS,
             size_bytes=size_bytes,
             receivers=receiver_count,
             round=round_index + 1,
@@ -238,6 +267,7 @@ class BenchmarkHarness:
 
     def run_shm_ref_round(
         self,
+        mode: str,
         size_bytes: int,
         receiver_count: int,
         round_index: int,
@@ -275,7 +305,8 @@ class BenchmarkHarness:
                 for topic in topic_names(receiver_count)
             )
         return BenchmarkResult(
-            mode="shm_ref",
+            mode=mode,
+            selected_mode=SHM_REF,
             size_bytes=size_bytes,
             receivers=receiver_count,
             round=round_index + 1,
@@ -283,6 +314,27 @@ class BenchmarkHarness:
             uds_payload_bytes=total_uds_payload_bytes,
             shm_bytes_written=size_bytes,
             checksum_ok=checksum_ok,
+        )
+
+    def run_adaptive_round(
+        self,
+        size_bytes: int,
+        receiver_count: int,
+        round_index: int,
+    ) -> BenchmarkResult:
+        selected_mode = self.adaptive_policy.choose_mode(size_bytes, receiver_count)
+        if selected_mode == DIRECT_UDS:
+            return self.run_direct_round(
+                mode="adaptive",
+                size_bytes=size_bytes,
+                receiver_count=receiver_count,
+                round_index=round_index,
+            )
+        return self.run_shm_ref_round(
+            mode="adaptive",
+            size_bytes=size_bytes,
+            receiver_count=receiver_count,
+            round_index=round_index,
         )
 
     @staticmethod
@@ -297,12 +349,16 @@ class BenchmarkHarness:
 
 
 def run_benchmark(
+    modes: Sequence[str],
     sizes: Sequence[int],
     receivers: Sequence[int],
     rounds: int,
+    adaptive_policy: AdaptiveTransportPolicy | None = None,
 ) -> List[BenchmarkResult]:
     if rounds <= 0:
         raise ValueError("rounds must be positive")
+    if not modes:
+        raise ValueError("at least one mode is required")
     if not sizes:
         raise ValueError("at least one size is required")
     if not receivers:
@@ -310,16 +366,32 @@ def run_benchmark(
 
     ensure_frame_limit(max(sizes))
     results: List[BenchmarkResult] = []
-    with BenchmarkHarness(max(receivers)) as harness:
+    with BenchmarkHarness(max(receivers), adaptive_policy=adaptive_policy) as harness:
         for size_bytes in sizes:
             for receiver_count in receivers:
                 for round_index in range(rounds):
-                    results.append(
-                        harness.run_direct_round(size_bytes, receiver_count, round_index)
-                    )
-                    results.append(
-                        harness.run_shm_ref_round(size_bytes, receiver_count, round_index)
-                    )
+                    for mode in modes:
+                        if mode == DIRECT_UDS:
+                            result = harness.run_direct_round(
+                                mode=DIRECT_UDS,
+                                size_bytes=size_bytes,
+                                receiver_count=receiver_count,
+                                round_index=round_index,
+                            )
+                        elif mode == SHM_REF:
+                            result = harness.run_shm_ref_round(
+                                mode=SHM_REF,
+                                size_bytes=size_bytes,
+                                receiver_count=receiver_count,
+                                round_index=round_index,
+                            )
+                        else:
+                            result = harness.run_adaptive_round(
+                                size_bytes=size_bytes,
+                                receiver_count=receiver_count,
+                                round_index=round_index,
+                            )
+                        results.append(result)
     return results
 
 
@@ -339,20 +411,34 @@ def print_summary(path: str, results: Sequence[BenchmarkResult]) -> None:
         return
     failures = [result for result in results if not result.checksum_ok]
     print(f"checksum failures: {len(failures)}")
-    for mode in ("direct_uds", "shm_ref"):
+    for mode in (DIRECT_UDS, SHM_REF, "adaptive"):
         mode_rows = [row for row in results if row.mode == mode]
         if not mode_rows:
             continue
         avg_latency = sum(row.latency_ms for row in mode_rows) / len(mode_rows)
         print(f"{mode}: avg_latency_ms={avg_latency:.3f}")
+    adaptive_rows = [row for row in results if row.mode == "adaptive"]
+    if adaptive_rows:
+        direct_count = sum(1 for row in adaptive_rows if row.selected_mode == DIRECT_UDS)
+        shm_count = sum(1 for row in adaptive_rows if row.selected_mode == SHM_REF)
+        print(
+            "adaptive selections:"
+            f" direct_uds={direct_count} shm_ref={shm_count}"
+        )
 
 
 def main() -> int:
     args = parse_args()
     try:
+        modes = parse_modes(args.modes)
         sizes = parse_sizes(args.sizes)
         receivers = parse_receivers(args.receivers)
-        results = run_benchmark(sizes=sizes, receivers=receivers, rounds=args.rounds)
+        results = run_benchmark(
+            modes=modes,
+            sizes=sizes,
+            receivers=receivers,
+            rounds=args.rounds,
+        )
     except Exception as exc:
         print(f"benchmark failed: {exc}", file=sys.stderr)
         return 1

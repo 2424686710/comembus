@@ -1,0 +1,55 @@
+"""Tests for the mock multi-agent incident diagnosis helpers."""
+
+from __future__ import annotations
+
+import unittest
+
+from examples.incident_diagnosis_mock.agents import (
+    DEFAULT_LOG_SIZE_BYTES,
+    analyze_config_text,
+    analyze_log_blob,
+    build_mock_config_text,
+    build_mock_log_blob,
+    summarize_incident,
+)
+
+
+class MockAgentHelperTests(unittest.TestCase):
+    def test_build_mock_log_blob_has_required_size(self) -> None:
+        blob = build_mock_log_blob(DEFAULT_LOG_SIZE_BYTES)
+        self.assertEqual(len(blob), DEFAULT_LOG_SIZE_BYTES)
+        self.assertIn(b"DatabaseTimeout", blob)
+        self.assertIn(b"ConnectionPoolExhausted", blob)
+
+    def test_analyze_log_blob_detects_database_pool_signal(self) -> None:
+        blob = build_mock_log_blob(DEFAULT_LOG_SIZE_BYTES)
+        facts = analyze_log_blob(blob, "INC-1")
+        self.assertEqual(facts["incident_id"], "INC-1")
+        self.assertEqual(facts["suspected_component"], "database_pool")
+        self.assertGreater(facts["database_timeout_count"], 0)
+        self.assertGreater(facts["pool_exhausted_count"], 0)
+
+    def test_analyze_config_text_extracts_risky_pool_size(self) -> None:
+        facts = analyze_config_text(build_mock_config_text(), "INC-2")
+        self.assertEqual(facts["incident_id"], "INC-2")
+        self.assertEqual(facts["service_name"], "checkout-api")
+        self.assertEqual(facts["pool_size"], 4)
+        self.assertEqual(facts["timeout_ms"], 250)
+        self.assertFalse(facts["retry_enabled"])
+        self.assertEqual(facts["config_risk"], "database_pool_too_small")
+
+    def test_summarize_incident_returns_expected_root_cause(self) -> None:
+        report = summarize_incident(
+            "INC-3",
+            build_mock_log_blob(DEFAULT_LOG_SIZE_BYTES),
+            build_mock_config_text(),
+        )
+        self.assertEqual(report["incident_id"], "INC-3")
+        self.assertEqual(report["confidence"], "high")
+        self.assertIn("database connection pool saturation", report["root_cause"].lower())
+        self.assertIn("Increase database.pool_size", report["recommended_action"])
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
+
