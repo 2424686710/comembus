@@ -13,11 +13,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from comembus.llm.adapter import BaseLLMClient, LLMMessage, build_llm_client
-from comembus.llm.agent import LLMReviewAgent
+from comembus.llm.agent import LLMReviewAgent, judge_root_cause_semantic as _judge_root_cause_semantic
 from comembus.memory.blackboard import SharedBlackboard
 from comembus.state.patch import apply_patch
 from examples.incident_diagnosis_mock.run_llm_agent_demo import (
     build_demo_task_state,
+    save_json_result,
     seed_demo_memories,
 )
 from examples.incident_diagnosis_mock.scenarios import default_scenarios
@@ -48,6 +49,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default="results/llm_multiagent_smoke.sqlite",
         help="SQLite path for temporary memory reuse data.",
     )
+    parser.add_argument(
+        "--save-json",
+        default="",
+        help="Optional JSON output path for the structured multi-agent LLM smoke result.",
+    )
     return parser.parse_args(argv)
 
 
@@ -65,33 +71,7 @@ def judge_root_cause_semantic(
     expected: str,
     scenario_tags: list[str] | None = None,
 ) -> bool:
-    predicted_text = str(predicted or "").strip().lower()
-    expected_text = str(expected or "").strip().lower()
-    if not predicted_text or not expected_text:
-        return False
-    if expected_text in predicted_text or predicted_text in expected_text:
-        return True
-
-    normalized_tags = [tag.strip().lower() for tag in (scenario_tags or []) if tag.strip()]
-    if normalized_tags:
-        matched_tags = sum(1 for tag in normalized_tags if tag in predicted_text)
-        if matched_tags > (len(normalized_tags) / 2.0):
-            return True
-
-    inferred_family = _infer_scenario_family(expected_text, normalized_tags)
-    if inferred_family == "database_timeout":
-        if _keyword_hit_count(predicted_text, ("database", "timeout", "port")) >= 2:
-            return True
-    elif inferred_family == "permission_denied":
-        if "permission denied" in predicted_text:
-            return True
-        if _keyword_hit_count(predicted_text, ("permission", "denied")) >= 2:
-            return True
-    elif inferred_family == "storage_full":
-        if _keyword_hit_count(predicted_text, ("storage", "disk", "full", "space")) >= 2:
-            return True
-
-    return False
+    return _judge_root_cause_semantic(predicted, expected, scenario_tags)
 
 
 def run_llm_multiagent_smoke(
@@ -101,6 +81,7 @@ def run_llm_multiagent_smoke(
     api_key_env: str = "COMEMBUS_LLM_API_KEY",
     llm_agents: str = "planner,review",
     db_path: str = "results/llm_multiagent_smoke.sqlite",
+    save_json: str | None = None,
 ) -> Dict[str, object]:
     db_file = Path(db_path)
     db_file.parent.mkdir(parents=True, exist_ok=True)
@@ -199,7 +180,7 @@ def run_llm_multiagent_smoke(
             expected=scenario.expected_root_cause,
             scenario_tags=list(scenario.tags),
         )
-        return {
+        result_payload = {
             "llm_agents": ",".join(sorted(selected_agents)),
             "llm_call_count": llm_call_count,
             "used_fallback_count": used_fallback_count,
@@ -207,6 +188,7 @@ def run_llm_multiagent_smoke(
             "root_cause_judge": "semantic",
             "provider": provider,
             "model": str(review_payload.get("model") or model or provider),
+            "total_tokens": review_payload.get("total_tokens"),
             "planner_action_list": action_list,
             "planner_plan": planner_plan,
             "log_explanation": log_explanation,
@@ -215,6 +197,23 @@ def run_llm_multiagent_smoke(
             "report": review_payload["report"],
             "llm_providers": llm_providers,
         }
+        if isinstance(save_json, str) and save_json.strip():
+            result_payload["saved_json"] = save_json_result(
+                save_json,
+                {
+                    "llm_agents": result_payload["llm_agents"],
+                    "llm_call_count": result_payload["llm_call_count"],
+                    "used_fallback_count": result_payload["used_fallback_count"],
+                    "root_cause": result_payload["root_cause"],
+                    "report": result_payload["report"],
+                    "root_cause_judge": result_payload["root_cause_judge"],
+                    "root_cause_correct": bool(result_payload["root_cause_correct"]),
+                    "provider": result_payload["provider"],
+                    "model": result_payload["model"],
+                    "total_tokens": result_payload.get("total_tokens"),
+                },
+            )
+        return result_payload
     finally:
         board.close()
 
@@ -316,35 +315,17 @@ def main() -> int:
         api_key_env=args.api_key_env,
         llm_agents=args.llm_agents,
         db_path=args.db_path,
+        save_json=args.save_json or None,
     )
     print(f"llm_agents={result['llm_agents']}")
     print(f"llm_call_count={result['llm_call_count']}")
     print(f"used_fallback_count={result['used_fallback_count']}")
     print(f"root_cause_judge={result['root_cause_judge']}")
     print(f"root_cause_correct={str(bool(result['root_cause_correct'])).lower()}")
+    if result.get("saved_json"):
+        print(f"saved_json={result['saved_json']}")
     print("OK: llm multi-agent smoke completed")
     return 0
-
-
-def _keyword_hit_count(text: str, keywords: Sequence[str]) -> int:
-    return sum(1 for keyword in keywords if keyword in text)
-
-
-def _infer_scenario_family(expected_text: str, normalized_tags: Sequence[str]) -> str:
-    tag_set = set(normalized_tags)
-    if "database_timeout" in tag_set or "timeout" in tag_set or "port" in tag_set:
-        return "database_timeout"
-    if "permission_denied" in tag_set or "permission" in tag_set or "credentials" in tag_set:
-        return "permission_denied"
-    if "storage_full" in tag_set or "storage" in tag_set or "disk" in tag_set:
-        return "storage_full"
-    if "permission denied" in expected_text:
-        return "permission_denied"
-    if "storage volume full" in expected_text or "write failures" in expected_text:
-        return "storage_full"
-    if "database timeout" in expected_text or "wrong database port" in expected_text:
-        return "database_timeout"
-    return ""
 
 
 if __name__ == "__main__":

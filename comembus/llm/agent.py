@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Sequence
+from typing import Dict, List, Mapping, Sequence
 
+from comembus.memory.blackboard import SharedBlackboard
 from comembus.memory.unit import MemoryUnit
 from comembus.state.task_state import TaskState
 
@@ -58,11 +59,36 @@ class LLMReviewAgent:
             "report": report,
             "provider": response.provider,
             "used_fallback": response.used_fallback,
+            "latency_ms": response.latency_ms,
             "model": response.model,
             "prompt_tokens": response.prompt_tokens,
             "completion_tokens": response.completion_tokens,
             "total_tokens": response.total_tokens,
         }
+
+    def write_report_memory(
+        self,
+        board: SharedBlackboard,
+        review_result: Mapping[str, object],
+    ) -> MemoryUnit:
+        root_cause = str(review_result.get("root_cause", "")).strip()
+        report = str(review_result.get("report", "")).strip()
+        return board.write_memory(
+            task_id="llm_demo_task",
+            source_agent="LLMReviewAgent",
+            task_topic="database timeout diagnosis",
+            memory_type="summary",
+            summary=root_cause,
+            content=report,
+            tags=["llm_report", "database_timeout", "wrong_port"],
+            confidence=0.95 if not bool(review_result.get("used_fallback")) else 0.70,
+            metadata={
+                "provider": str(review_result.get("provider", "")),
+                "model": str(review_result.get("model", "")),
+                "used_fallback": bool(review_result.get("used_fallback")),
+                "total_tokens": review_result.get("total_tokens"),
+            },
+        )
 
     def _prompt_messages(
         self,
@@ -135,3 +161,58 @@ def _parse_llm_content(content: str) -> tuple[str, str]:
     if not report and content.strip():
         report = content.strip()
     return root_cause, report
+
+
+def judge_root_cause_semantic(
+    predicted: str,
+    expected: str,
+    scenario_tags: Sequence[str] | None = None,
+) -> bool:
+    predicted_text = str(predicted or "").strip().lower()
+    expected_text = str(expected or "").strip().lower()
+    if not predicted_text or not expected_text:
+        return False
+    if expected_text in predicted_text or predicted_text in expected_text:
+        return True
+
+    normalized_tags = [tag.strip().lower() for tag in (scenario_tags or []) if tag.strip()]
+    if normalized_tags:
+        matched_tags = sum(1 for tag in normalized_tags if tag in predicted_text)
+        if matched_tags > (len(normalized_tags) / 2.0):
+            return True
+
+    inferred_family = _infer_scenario_family(expected_text, normalized_tags)
+    if inferred_family == "database_timeout":
+        if _keyword_hit_count(predicted_text, ("database", "timeout", "port")) >= 2:
+            return True
+    elif inferred_family == "permission_denied":
+        if "permission denied" in predicted_text:
+            return True
+        if _keyword_hit_count(predicted_text, ("permission", "denied")) >= 2:
+            return True
+    elif inferred_family == "storage_full":
+        if _keyword_hit_count(predicted_text, ("storage", "disk", "full", "space")) >= 2:
+            return True
+
+    return False
+
+
+def _keyword_hit_count(text: str, keywords: Sequence[str]) -> int:
+    return sum(1 for keyword in keywords if keyword in text)
+
+
+def _infer_scenario_family(expected_text: str, normalized_tags: Sequence[str]) -> str:
+    tag_set = set(normalized_tags)
+    if "database_timeout" in tag_set or "timeout" in tag_set or "port" in tag_set:
+        return "database_timeout"
+    if "permission_denied" in tag_set or "permission" in tag_set or "credentials" in tag_set:
+        return "permission_denied"
+    if "storage_full" in tag_set or "storage" in tag_set or "disk" in tag_set:
+        return "storage_full"
+    if "permission denied" in expected_text:
+        return "permission_denied"
+    if "storage volume full" in expected_text or "write failures" in expected_text:
+        return "storage_full"
+    if "database timeout" in expected_text or "wrong database port" in expected_text:
+        return "database_timeout"
+    return ""

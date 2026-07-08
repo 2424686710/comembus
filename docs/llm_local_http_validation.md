@@ -194,3 +194,38 @@ SKIP: remote LLM env not configured
 ```
 
 并直接退出 `0`，这样就不会破坏默认离线实验流程。
+
+## mock vs remote 对比
+
+如果希望把离线 mock 和真实 remote provider 的输出同时保存下来，可以运行：
+
+```bash
+bash scripts/run_llm_compare.sh
+```
+
+这个脚本会先写出：
+
+- `results/llm_mock_smoke.json`
+
+如果远程环境变量已配置，还会再写出：
+
+- `results/llm_remote_smoke.json`
+
+并打印：
+
+- `root_cause`
+- `report`
+- `total_tokens`
+- `used_fallback`
+
+## 如何理解结果
+
+当输出里出现：
+
+- `used_fallback=false`
+
+说明真实调用成功了，而不是回退到 mock。
+
+`total_tokens` 来自真实 API 返回的 `usage.total_tokens`。如果该字段存在，就说明当前 provider 的 usage 信息已经被 CoMemBus 记录下来了。
+
+如果 mock 和 remote 的 `report` 不同，通常说明模型生成已经真正生效，而不再只是走离线 deterministic/mock 路径。

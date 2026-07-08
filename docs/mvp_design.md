@@ -491,6 +491,25 @@ v0.11 还补了一个 multi-agent LLM smoke，用来验证“多个 agent 共享
 - 本地模型服务验证
 - 远程兼容接口验证
 
+v0.11.3 继续在这个 optional LLM 层上补了一点“实验产物可见性”：
+
+- `run_llm_agent_demo.py` 可以把结果保存到 JSON
+- `run_llm_multiagent_smoke.py` 也可以保存结构化 smoke 结果
+- `LLMReviewAgent` 的最终报告可以可选写回 SharedBlackboard
+- `scripts/run_llm_compare.sh` 可以直接比较 mock 与 remote 的报告差异
+
+这样做的意义不是把真实 LLM 拉进默认 benchmark，而是把它作为一个“可复现实验补充层”：
+
+- 无 API key、无网络时，主流程仍然完全可跑
+- 有 remote 环境时，可以额外留下 `results/llm_mock_smoke.json` / `results/llm_remote_smoke.json`
+- `used_fallback`、`total_tokens`、`report` 差异都能被保存下来，便于后续汇报或复盘
+
+这也解释了为什么默认 benchmark 仍坚持 mock / replay：
+
+- benchmark 关注的是稳定、可比较的系统层指标
+- 真实远程模型会引入额外随机性和外部依赖
+- optional LLM 更适合作为“接入验证”和“自然语言报告增强”能力，而不是 benchmark 基准本身
+
 ## 图表说明
 
 v0.10 新增 `scripts/generate_result_figures.py`，目标是把已有 benchmark 结果转成无需第三方绘图库的 SVG 图表。

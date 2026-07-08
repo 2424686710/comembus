@@ -4,15 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import sys
+import time
 from typing import Dict, List, Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from comembus.llm.agent import LLMReviewAgent
+from comembus.llm.agent import LLMReviewAgent, judge_root_cause_semantic
 from comembus.llm.local_http_client import resolve_model_name
 from comembus.llm.openai_compatible_client import resolve_model as resolve_remote_model
 from comembus.memory.blackboard import SharedBlackboard
@@ -48,6 +50,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--api-key-env",
         default="COMEMBUS_LLM_API_KEY",
         help="Environment variable name for provider=openai_compatible.",
+    )
+    parser.add_argument(
+        "--save-json",
+        default="",
+        help="Optional JSON output path for the structured LLM smoke result.",
+    )
+    parser.add_argument(
+        "--write-memory",
+        action="store_true",
+        help="Write the final LLM report into SharedBlackboard.",
     )
     return parser.parse_args(argv)
 
@@ -118,6 +130,8 @@ def run_llm_agent_demo(
     model: str | None = None,
     api_key_env: str = "COMEMBUS_LLM_API_KEY",
     db_path: str = "results/llm_agent_demo.sqlite",
+    save_json: str | None = None,
+    write_memory: bool = False,
 ) -> Dict[str, object]:
     results_path = Path(db_path)
     results_path.parent.mkdir(parents=True, exist_ok=True)
@@ -147,9 +161,44 @@ def run_llm_agent_demo(
         result = agent.review(task_state=task_state, memories=memories, evidence=evidence)
         result["task_id"] = task_state.task_id
         result["model"] = str(result.get("model") or resolved_model)
+        result["root_cause_correct"] = judge_root_cause_semantic(
+            predicted=str(result["root_cause"]),
+            expected=scenario.expected_root_cause,
+            scenario_tags=list(scenario.tags),
+        )
+        result["timestamp"] = time.time()
+        result["memory_id"] = None
+        if write_memory:
+            memory = agent.write_report_memory(board, result)
+            result["memory_id"] = memory.memory_id
+        if isinstance(save_json, str) and save_json.strip():
+            payload = {
+                "provider": result["provider"],
+                "model": result["model"],
+                "used_fallback": bool(result["used_fallback"]),
+                "latency_ms": result.get("latency_ms"),
+                "total_tokens": result.get("total_tokens"),
+                "root_cause": result["root_cause"],
+                "report": result["report"],
+                "root_cause_correct": bool(result["root_cause_correct"]),
+                "timestamp": result["timestamp"],
+            }
+            result["saved_json"] = save_json_result(save_json, payload)
+        else:
+            result["saved_json"] = None
         return result
     finally:
         board.close()
+
+
+def save_json_result(path: str, payload: Dict[str, object]) -> str:
+    json_path = Path(path)
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return str(json_path)
 
 
 def main() -> int:
@@ -160,6 +209,8 @@ def main() -> int:
         model=args.model or None,
         api_key_env=args.api_key_env,
         db_path=args.db_path,
+        save_json=args.save_json or None,
+        write_memory=bool(args.write_memory),
     )
     print(f"provider={result['provider']}")
     print(f"model={result['model']}")
@@ -168,6 +219,10 @@ def main() -> int:
         print(f"total_tokens={result['total_tokens']}")
     print(f"root_cause={result['root_cause']}")
     print(f"report={result['report']}")
+    if result.get("saved_json"):
+        print(f"saved_json={result['saved_json']}")
+    if result.get("memory_id"):
+        print(f"memory_id={result['memory_id']}")
     print("OK: llm agent demo completed")
     return 0
 

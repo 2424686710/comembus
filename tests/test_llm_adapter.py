@@ -13,6 +13,7 @@ from comembus.llm.adapter import LLMMessage, build_llm_client
 from comembus.llm.agent import LLMReviewAgent
 from comembus.llm.local_http_client import LocalHTTPChatClient
 from comembus.llm.mock_client import MockLLMClient
+from comembus.memory.blackboard import SharedBlackboard
 from comembus.memory.unit import MemoryUnit
 from comembus.state.task_state import TaskState
 from examples.incident_diagnosis_mock.run_llm_agent_demo import parse_args, run_llm_agent_demo
@@ -163,6 +164,7 @@ class LLMAdapterTests(unittest.TestCase):
             result["root_cause"],
             "wrong database port caused database timeout",
         )
+        self.assertTrue(result["root_cause_correct"])
 
     def test_run_llm_agent_demo_local_http_falls_back(self) -> None:
         with mock.patch(
@@ -181,6 +183,46 @@ class LLMAdapterTests(unittest.TestCase):
         self.assertTrue(result["used_fallback"])
         self.assertIn("wrong database port", str(result["root_cause"]).lower())
 
+    def test_run_llm_agent_demo_can_save_json_and_write_memory(self) -> None:
+        json_path = os.path.join(self.tempdir.name, "llm_result.json")
+
+        result = run_llm_agent_demo(
+            provider="mock",
+            db_path=self.db_path,
+            save_json=json_path,
+            write_memory=True,
+        )
+
+        self.assertEqual(result["saved_json"], json_path)
+        self.assertIsInstance(result["memory_id"], str)
+        with open(json_path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        for field_name in (
+            "provider",
+            "model",
+            "used_fallback",
+            "latency_ms",
+            "total_tokens",
+            "root_cause",
+            "report",
+            "root_cause_correct",
+            "timestamp",
+        ):
+            self.assertIn(field_name, payload)
+        self.assertEqual(payload["provider"], "mock")
+        self.assertEqual(payload["root_cause"], "wrong database port caused database timeout")
+        self.assertTrue(payload["root_cause_correct"])
+
+        board = SharedBlackboard(self.db_path)
+        try:
+            memories = board.list_task_memories("llm_demo_task")
+        finally:
+            board.close()
+        self.assertEqual(len(memories), 1)
+        self.assertEqual(memories[0].memory_id, result["memory_id"])
+        self.assertEqual(memories[0].source_agent, "LLMReviewAgent")
+        self.assertEqual(memories[0].memory_type, "summary")
+
     def test_parse_args_accepts_model_option(self) -> None:
         args = parse_args(
             [
@@ -192,12 +234,17 @@ class LLMAdapterTests(unittest.TestCase):
                 "mini-model",
                 "--api-key-env",
                 "CUSTOM_KEY_ENV",
+                "--save-json",
+                "results/llm_remote_smoke.json",
+                "--write-memory",
             ]
         )
 
         self.assertEqual(args.provider, "openai_compatible")
         self.assertEqual(args.model, "mini-model")
         self.assertEqual(args.api_key_env, "CUSTOM_KEY_ENV")
+        self.assertEqual(args.save_json, "results/llm_remote_smoke.json")
+        self.assertTrue(args.write_memory)
 
 
 if __name__ == "__main__":
