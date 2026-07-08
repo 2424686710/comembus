@@ -11,8 +11,12 @@ import threading
 import unittest
 
 from comembus.llm.adapter import LLMMessage, build_llm_client
-from comembus.llm.openai_compatible_client import OpenAICompatibleChatClient
+from comembus.llm.openai_compatible_client import (
+    OpenAICompatibleChatClient,
+    normalize_chat_endpoint,
+)
 from examples.incident_diagnosis_mock.run_llm_multiagent_smoke import (
+    judge_root_cause_semantic,
     parse_llm_agents,
     run_llm_multiagent_smoke,
 )
@@ -37,6 +41,24 @@ class OpenAICompatibleClientTests(unittest.TestCase):
         self.assertEqual(response.provider, "mock")
         self.assertTrue(response.used_fallback)
         self.assertEqual(response.model, "remote-model")
+
+    def test_normalize_chat_endpoint_variants(self) -> None:
+        self.assertEqual(
+            normalize_chat_endpoint("https://api.deepseek.com"),
+            "https://api.deepseek.com/chat/completions",
+        )
+        self.assertEqual(
+            normalize_chat_endpoint("https://api.deepseek.com/chat/completions"),
+            "https://api.deepseek.com/chat/completions",
+        )
+        self.assertEqual(
+            normalize_chat_endpoint("https://xxx/v1"),
+            "https://xxx/v1/chat/completions",
+        )
+        self.assertEqual(
+            normalize_chat_endpoint("https://xxx/compatible-mode/v1/chat/completions"),
+            "https://xxx/compatible-mode/v1/chat/completions",
+        )
 
     def test_fake_server_response_parses_content_and_usage_tokens(self) -> None:
         captured: dict[str, object] = {}
@@ -123,6 +145,24 @@ class OpenAICompatibleClientTests(unittest.TestCase):
         self.assertEqual(client.model, "remote-model")
         self.assertEqual(client.api_key_env, "COMEMBUS_LLM_API_KEY")
 
+    def test_root_cause_semantic_judge_accepts_close_real_llm_output(self) -> None:
+        self.assertTrue(
+            judge_root_cause_semantic(
+                predicted="wrong database port (15432) pointing to obsolete replica",
+                expected="wrong database port caused database timeout",
+                scenario_tags=["database", "timeout", "port"],
+            )
+        )
+
+    def test_root_cause_semantic_judge_rejects_irrelevant_output(self) -> None:
+        self.assertFalse(
+            judge_root_cause_semantic(
+                predicted="cpu throttling due to noisy neighbor",
+                expected="wrong database port caused database timeout",
+                scenario_tags=["database", "timeout", "port"],
+            )
+        )
+
     def test_multiagent_smoke_core_function_runs_under_mock(self) -> None:
         result = run_llm_multiagent_smoke(
             provider="mock",
@@ -133,6 +173,7 @@ class OpenAICompatibleClientTests(unittest.TestCase):
         self.assertEqual(parse_llm_agents("all"), {"planner", "log", "config", "review"})
         self.assertEqual(result["llm_call_count"], 2)
         self.assertEqual(result["used_fallback_count"], 0)
+        self.assertEqual(result["root_cause_judge"], "semantic")
         self.assertTrue(result["root_cause_correct"])
 
 

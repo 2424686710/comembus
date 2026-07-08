@@ -118,8 +118,25 @@ class OpenAICompatibleChatClient(BaseLLMClient):
 
 def resolve_endpoint(endpoint: str | None = None) -> str:
     if isinstance(endpoint, str) and endpoint.strip():
-        return endpoint.strip()
-    return os.environ.get("COMEMBUS_LLM_ENDPOINT", "").strip()
+        return normalize_chat_endpoint(endpoint.strip())
+    env_endpoint = os.environ.get("COMEMBUS_LLM_ENDPOINT", "").strip()
+    if not env_endpoint:
+        return ""
+    return normalize_chat_endpoint(env_endpoint)
+
+
+def normalize_chat_endpoint(url: str) -> str:
+    normalized = url.strip()
+    if not normalized:
+        return normalized
+    if normalized.endswith("/chat/completions"):
+        return normalized
+    stripped = normalized.rstrip("/")
+    if stripped.endswith("/chat/completions"):
+        return stripped
+    if stripped.endswith("/v1"):
+        return f"{stripped}/chat/completions"
+    return f"{stripped}/chat/completions"
 
 
 def resolve_model(model: str | None = None) -> str:

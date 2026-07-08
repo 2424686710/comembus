@@ -583,6 +583,82 @@ v0.11 新增了 multi-agent LLM smoke test。它的重点不是让 LLM 接管核
 - LLM 调用失败不会破坏系统级验证
 - 可以把“多 Agent + optional real model”这一层单独做 smoke，而不干扰默认 benchmark 和离线流程
 
+## Minimal CodeAct Sandbox
+
+v0.12 新增了一个最小 CodeAct sandbox，但它被明确放在 optional 加分项位置，而不是主执行链路里。
+
+它的目标很克制：
+
+- 让 agent 能产生一小段 Python 代码
+- 让代码在受限环境中执行
+- 让执行结果以结构化 dict 返回
+- 让结果还能沉淀到 SharedBlackboard 中
+
+这个模块当前不进入 `run_all.sh`，原因很直接：
+
+- 比赛主链路要继续保持可复现和低风险
+- 代码执行天然比普通结构化消息更敏感
+- CodeAct 在当前阶段更适合作为“能力扩展验证”，而不是默认基础设施前提
+
+### 为什么要单独做 AST 校验
+
+如果只做子进程隔离，而不做语法层限制，仍然会留下很多不必要的风险面。
+
+所以当前设计先经过 `ASTCodeValidator`，只允许一个很小的 Python 子集：
+
+- 基本字面量和容器
+- 变量赋值
+- `if`
+- `for`
+- 少量白名单函数
+- 少量预置 `math` 能力
+
+明确禁止：
+
+- `import`
+- `open`
+- `eval`
+- `exec`
+- `compile`
+- `__import__`
+- `with`
+- `try`
+- `class`
+- `lambda`
+- `while`
+- 双下划线属性访问
+
+这样做的意义是：先把“能做什么”压缩到一个很小、很容易解释和测试的范围，再谈执行隔离。
+
+### 为什么还要用 multiprocessing 隔离
+
+AST 校验解决的是“语义子集”问题，`multiprocessing.Process` 解决的是“运行时失控”问题。
+
+当前 sandbox 的执行约束是：
+
+- 代码在单独子进程里运行
+- 默认超时 2 秒
+- 超时后直接 `terminate()`
+- `stdout` 和错误文本都限制在 4096 字符以内
+- 用户代码必须显式写出 `result`
+
+这让 CodeAct 更像一个“轻量工具动作层”，而不是 unrestricted Python interpreter。
+
+### 与赛题鼓励项的对应关系
+
+如果把 CoMemBus 的层次拆开来看：
+
+- UDS + Shared Memory 解决低开销通信
+- `TaskState` + `StatePatch` 解决状态传递
+- SharedBlackboard 解决共享记忆
+- Minimal CodeAct Sandbox 则补上一个“受限代码动作”的实验入口
+
+它的价值不在于功能有多强，而在于它证明了：
+
+1. 结构化 facts 可以驱动受限代码执行
+2. 代码执行结果可以重新进入结构化协作链路
+3. 整个过程仍然可以保持离线、标准库、openEuler 兼容
+
 为了证明这套黑板不只是“能存”，仓库新增了两个验证入口：
 
 - `examples/incident_diagnosis_mock/run_memory_reuse_demo.py`
