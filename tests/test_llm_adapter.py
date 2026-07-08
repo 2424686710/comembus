@@ -185,16 +185,19 @@ class LLMAdapterTests(unittest.TestCase):
         args = parse_args(
             [
                 "--provider",
-                "local_http",
+                "openai_compatible",
                 "--endpoint",
                 "http://127.0.0.1:11434/v1/chat/completions",
                 "--model",
                 "mini-model",
+                "--api-key-env",
+                "CUSTOM_KEY_ENV",
             ]
         )
 
-        self.assertEqual(args.provider, "local_http")
+        self.assertEqual(args.provider, "openai_compatible")
         self.assertEqual(args.model, "mini-model")
+        self.assertEqual(args.api_key_env, "CUSTOM_KEY_ENV")
 
 
 if __name__ == "__main__":

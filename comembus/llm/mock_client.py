@@ -72,4 +72,5 @@ class MockLLMClient(BaseLLMClient):
             provider="mock",
             latency_ms=latency_ms,
             used_fallback=False,
+            model="mock",
         )

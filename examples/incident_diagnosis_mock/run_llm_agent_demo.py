@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
 
 from comembus.llm.agent import LLMReviewAgent
 from comembus.llm.local_http_client import resolve_model_name
+from comembus.llm.openai_compatible_client import resolve_model as resolve_remote_model
 from comembus.memory.blackboard import SharedBlackboard
 from comembus.memory.unit import MemoryUnit
 from comembus.state.task_state import TaskState
@@ -25,7 +26,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--provider",
         default="mock",
-        choices=["mock", "local_http"],
+        choices=["mock", "local_http", "openai_compatible"],
         help="Optional LLM provider. Defaults to offline mock.",
     )
     parser.add_argument(
@@ -42,6 +43,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--db-path",
         default="results/llm_agent_demo.sqlite",
         help="SQLite path for temporary memory reuse data.",
+    )
+    parser.add_argument(
+        "--api-key-env",
+        default="COMEMBUS_LLM_API_KEY",
+        help="Environment variable name for provider=openai_compatible.",
     )
     return parser.parse_args(argv)
 
@@ -110,6 +116,7 @@ def run_llm_agent_demo(
     provider: str = "mock",
     endpoint: str | None = None,
     model: str | None = None,
+    api_key_env: str = "COMEMBUS_LLM_API_KEY",
     db_path: str = "results/llm_agent_demo.sqlite",
 ) -> Dict[str, object]:
     results_path = Path(db_path)
@@ -129,14 +136,17 @@ def run_llm_agent_demo(
         resolved_model = "mock"
         if provider == "local_http":
             resolved_model = resolve_model_name(model)
+        elif provider == "openai_compatible":
+            resolved_model = resolve_remote_model(model)
         agent = LLMReviewAgent.from_provider(
             provider=provider,
             endpoint=endpoint or None,
             model=model or None,
+            api_key_env=api_key_env,
         )
         result = agent.review(task_state=task_state, memories=memories, evidence=evidence)
         result["task_id"] = task_state.task_id
-        result["model"] = resolved_model
+        result["model"] = str(result.get("model") or resolved_model)
         return result
     finally:
         board.close()
@@ -148,11 +158,14 @@ def main() -> int:
         provider=args.provider,
         endpoint=args.endpoint or None,
         model=args.model or None,
+        api_key_env=args.api_key_env,
         db_path=args.db_path,
     )
     print(f"provider={result['provider']}")
     print(f"model={result['model']}")
     print(f"used_fallback={str(bool(result['used_fallback'])).lower()}")
+    if result.get("total_tokens") is not None:
+        print(f"total_tokens={result['total_tokens']}")
     print(f"root_cause={result['root_cause']}")
     print(f"report={result['report']}")
     print("OK: llm agent demo completed")

@@ -1,9 +1,9 @@
 # CoMemBus Result Summary
 
 ## Transport Benchmark Summary
-- direct_uds: avg_latency_ms=36.826, checksum_ok_rate=1.0000
-- shm_ref: avg_latency_ms=5.958, checksum_ok_rate=1.0000
-- adaptive: avg_latency_ms=5.621, checksum_ok_rate=1.0000
+- direct_uds: avg_latency_ms=36.823, checksum_ok_rate=1.0000
+- shm_ref: avg_latency_ms=6.007, checksum_ok_rate=1.0000
+- adaptive: avg_latency_ms=5.713, checksum_ok_rate=1.0000
 
 ## StatePatch Benchmark Summary
 - small: full_state_bytes=1136, patch_bytes=214, reduction_ratio=0.188380
@@ -19,7 +19,7 @@
 - text_mode total_tokens=655654
 - structured_mode total_tokens=10021
 - token_saving_ratio=0.984716
-- latency_saving_ratio=0.484606
+- latency_saving_ratio=0.490696
 - structured_mode memory_hit_rate=0.7000
 - total_saved_steps=12
 - embedding_state_count=10

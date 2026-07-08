@@ -26,12 +26,14 @@ class LLMReviewAgent:
         provider: str = "mock",
         endpoint: str | None = None,
         model: str | None = None,
+        api_key_env: str = "COMEMBUS_LLM_API_KEY",
     ) -> "LLMReviewAgent":
         return cls(
             llm_client=build_llm_client(
                 provider=provider,
                 endpoint=endpoint,
                 model=model,
+                api_key_env=api_key_env,
             )
         )
 
@@ -56,6 +58,10 @@ class LLMReviewAgent:
             "report": report,
             "provider": response.provider,
             "used_fallback": response.used_fallback,
+            "model": response.model,
+            "prompt_tokens": response.prompt_tokens,
+            "completion_tokens": response.completion_tokens,
+            "total_tokens": response.total_tokens,
         }
 
     def _prompt_messages(

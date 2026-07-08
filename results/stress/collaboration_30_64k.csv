@@ -1,61 +1,61 @@
 mode,task_index,task_topic,message_count,text_chars,approx_tokens,protocol_bytes,object_ref_count,state_patch_count,memory_ref_count,non_text_state_bytes,shared_object_bytes,memory_hit,reused_memory_id,baseline_steps,actual_steps,saved_steps,total_latency_ms,root_cause_correct,scenario_family,capability_count,capability_discovery_count,embedding_state_count,embedding_state_bytes
-text_mode,1,checkout database timeout on primary failover,4,262266,65567,264911,0,0,0,0,0,false,,5,5,0,91.713,true,database_timeout,0,0,0,0
-structured_mode,1,checkout database timeout on primary failover,6,3779,945,9232,1,2,0,2331,8388608,false,,5,5,0,56.874,true,database_timeout,5,3,1,1289
-text_mode,2,checkout timeout after config drift on blue deployment,4,262278,65570,264955,0,0,0,0,0,false,,5,5,0,91.679,true,database_timeout,0,0,0,0
-structured_mode,2,checkout timeout after config drift on blue deployment,6,3941,986,9407,1,2,6,2306,8388608,true,df01f14ec4ff48279142ce4d375204e0,5,3,2,50.990,true,database_timeout,5,3,1,1278
-text_mode,3,payment timeout while talking to checkout database,4,262279,65570,264943,0,0,0,0,0,false,,5,5,0,91.665,true,database_timeout,0,0,0,0
-structured_mode,3,payment timeout while talking to checkout database,6,4075,1019,9498,1,2,6,2339,8388608,true,df01f14ec4ff48279142ce4d375204e0,5,3,2,44.154,true,database_timeout,5,3,1,1273
-text_mode,4,canary rollout triggers repeated postgres timeout,4,262278,65570,264938,0,0,0,0,0,false,,5,5,0,91.655,true,database_timeout,0,0,0,0
-structured_mode,4,canary rollout triggers repeated postgres timeout,6,4069,1018,9550,1,2,6,2369,8388608,true,df01f14ec4ff48279142ce4d375204e0,5,3,2,43.838,true,database_timeout,5,3,1,1305
-text_mode,5,credential refresh fails with permission denied,4,262279,65570,264927,0,0,0,0,0,false,,5,5,0,91.651,true,permission_denied,0,0,0,0
-structured_mode,5,credential refresh fails with permission denied,6,4016,1004,9575,1,2,0,2455,8388608,false,,5,5,0,49.826,true,permission_denied,5,3,1,1359
-text_mode,6,worker restart still cannot read secret volume,4,262281,65571,264927,0,0,0,0,0,false,,5,5,0,91.627,true,permission_denied,0,0,0,0
-structured_mode,6,worker restart still cannot read secret volume,6,4178,1045,9762,1,2,6,2455,8388608,true,b22e5e3be6714257a2a9a434a27453e6,5,4,1,43.420,true,permission_denied,5,3,1,1373
-text_mode,7,batch node loses database credentials after hardening,4,262145,65537,264819,0,0,0,0,0,false,,5,5,0,91.627,true,permission_denied,0,0,0,0
-structured_mode,7,batch node loses database credentials after hardening,6,4206,1052,9787,1,2,6,2451,8388608,true,b22e5e3be6714257a2a9a434a27453e6,5,3,2,43.955,true,permission_denied,5,3,1,1365
-text_mode,8,checkout jobs fail to load credential bundle,4,262270,65568,264910,0,0,0,0,0,false,,5,5,0,91.647,true,permission_denied,0,0,0,0
-structured_mode,8,checkout jobs fail to load credential bundle,6,4208,1052,9779,1,2,6,2457,8388608,true,bcb0e776b0b548cf82822c158974b00a,5,3,2,44.020,true,permission_denied,5,3,1,1353
-text_mode,9,database writes fail because storage is full,4,262257,65565,264898,0,0,0,0,0,false,,5,5,0,91.667,true,storage_full,0,0,0,0
-structured_mode,9,database writes fail because storage is full,6,3695,924,9216,1,2,0,2330,8388608,false,,5,5,0,49.938,true,storage_full,5,3,1,1310
-text_mode,10,replica promotion stalls on no space left error,4,262263,65566,264916,0,0,0,0,0,false,,5,5,0,91.616,true,storage_full,0,0,0,0
-structured_mode,10,replica promotion stalls on no space left error,6,3904,976,9442,1,2,6,2333,8388608,true,92a1225c4fc74e89ba96d0e60253123e,5,4,1,45.488,true,storage_full,5,3,1,1311
-text_mode,11,maintenance job aborts because postgres volume is full,4,262282,65571,264962,0,0,0,0,0,false,,5,5,0,92.653,true,storage_full,0,0,0,0
-structured_mode,11,maintenance job aborts because postgres volume is full,6,4012,1003,9487,1,2,6,2329,8388608,true,92a1225c4fc74e89ba96d0e60253123e,5,3,2,43.900,true,storage_full,5,3,1,1287
-text_mode,12,checkout recovery loop hits disk-full condition again,4,262285,65572,264960,0,0,0,0,0,false,,5,5,0,91.623,true,storage_full,0,0,0,0
-structured_mode,12,checkout recovery loop hits disk-full condition again,6,4106,1027,9582,1,2,6,2366,8388608,true,92a1225c4fc74e89ba96d0e60253123e,5,3,2,46.050,true,storage_full,5,3,1,1298
-text_mode,13,checkout database timeout on primary failover [cycle 2],4,262286,65572,264969,0,0,0,0,0,false,,5,5,0,91.749,true,database_timeout,0,0,0,0
-structured_mode,13,checkout database timeout on primary failover [cycle 2],6,4016,1004,9485,1,2,6,2334,8388608,true,df01f14ec4ff48279142ce4d375204e0,5,5,0,46.946,true,database_timeout,5,3,1,1290
-text_mode,14,checkout timeout after config drift on blue deployment [cycle 2],4,262151,65538,264869,0,0,0,0,0,false,,5,5,0,91.613,true,database_timeout,0,0,0,0
-structured_mode,14,checkout timeout after config drift on blue deployment [cycle 2],6,3986,997,9459,1,2,6,2309,8388608,true,df01f14ec4ff48279142ce4d375204e0,5,3,2,46.063,true,database_timeout,5,3,1,1279
-text_mode,15,payment timeout while talking to checkout database [cycle 2],4,262152,65538,264854,0,0,0,0,0,false,,5,5,0,91.762,true,database_timeout,0,0,0,0
-structured_mode,15,payment timeout while talking to checkout database [cycle 2],6,4120,1030,9545,1,2,6,2342,8388608,true,df01f14ec4ff48279142ce4d375204e0,5,3,2,48.854,true,database_timeout,5,3,1,1274
-text_mode,16,canary rollout triggers repeated postgres timeout [cycle 2],4,262151,65538,264847,0,0,0,0,0,false,,5,5,0,91.754,true,database_timeout,0,0,0,0
-structured_mode,16,canary rollout triggers repeated postgres timeout [cycle 2],6,4114,1029,9602,1,2,6,2372,8388608,true,df01f14ec4ff48279142ce4d375204e0,5,3,2,43.907,true,database_timeout,5,3,1,1306
-text_mode,17,credential refresh fails with permission denied [cycle 2],4,262152,65538,264840,0,0,0,0,0,false,,5,5,0,91.626,true,permission_denied,0,0,0,0
-structured_mode,17,credential refresh fails with permission denied [cycle 2],6,4253,1064,9831,1,2,6,2458,8388608,true,bcb0e776b0b548cf82822c158974b00a,5,5,0,47.043,true,permission_denied,5,3,1,1360
-text_mode,18,worker restart still cannot read secret volume [cycle 2],4,262154,65539,264838,0,0,0,0,0,false,,5,5,0,91.626,true,permission_denied,0,0,0,0
-structured_mode,18,worker restart still cannot read secret volume [cycle 2],6,4223,1056,9813,1,2,6,2458,8388608,true,bcb0e776b0b548cf82822c158974b00a,5,4,1,45.549,true,permission_denied,5,3,1,1374
-text_mode,19,batch node loses database credentials after hardening [cycle 2],4,262165,65542,264878,0,0,0,0,0,false,,5,5,0,91.619,true,permission_denied,0,0,0,0
-structured_mode,19,batch node loses database credentials after hardening [cycle 2],6,4251,1063,9837,1,2,6,2454,8388608,true,bcb0e776b0b548cf82822c158974b00a,5,3,2,46.961,true,permission_denied,5,3,1,1366
-text_mode,20,checkout jobs fail to load credential bundle [cycle 2],4,262290,65573,264969,0,0,0,0,0,false,,5,5,0,91.637,true,permission_denied,0,0,0,0
-structured_mode,20,checkout jobs fail to load credential bundle [cycle 2],6,4253,1064,9830,1,2,6,2460,8388608,true,bcb0e776b0b548cf82822c158974b00a,5,3,2,44.980,true,permission_denied,5,3,1,1354
-text_mode,21,database writes fail because storage is full [cycle 2],4,262277,65570,264956,0,0,0,0,0,false,,5,5,0,91.777,true,storage_full,0,0,0,0
-structured_mode,21,database writes fail because storage is full [cycle 2],6,3932,983,9470,1,2,6,2332,8388608,true,92a1225c4fc74e89ba96d0e60253123e,5,5,0,49.914,true,storage_full,5,3,1,1310
-text_mode,22,replica promotion stalls on no space left error [cycle 2],4,262283,65571,264975,0,0,0,0,0,false,,5,5,0,91.637,true,storage_full,0,0,0,0
-structured_mode,22,replica promotion stalls on no space left error [cycle 2],6,3944,986,9486,1,2,6,2333,8388608,true,92a1225c4fc74e89ba96d0e60253123e,5,4,1,46.551,true,storage_full,5,3,1,1311
-text_mode,23,maintenance job aborts because postgres volume is full [cycle 2],4,262155,65539,264872,0,0,0,0,0,false,,5,5,0,91.664,true,storage_full,0,0,0,0
-structured_mode,23,maintenance job aborts because postgres volume is full [cycle 2],6,4052,1013,9524,1,2,6,2329,8388608,true,92a1225c4fc74e89ba96d0e60253123e,5,3,2,48.553,true,storage_full,5,3,1,1287
-text_mode,24,checkout recovery loop hits disk-full condition again [cycle 2],4,262158,65540,264870,0,0,0,0,0,false,,5,5,0,91.656,true,storage_full,0,0,0,0
-structured_mode,24,checkout recovery loop hits disk-full condition again [cycle 2],6,4146,1037,9623,1,2,6,2366,8388608,true,92a1225c4fc74e89ba96d0e60253123e,5,3,2,46.942,true,storage_full,5,3,1,1298
-text_mode,25,checkout database timeout on primary failover [cycle 3],4,262286,65572,264969,0,0,0,0,0,false,,5,5,0,91.622,true,database_timeout,0,0,0,0
-structured_mode,25,checkout database timeout on primary failover [cycle 3],6,4016,1004,9481,1,2,6,2334,8388608,true,df01f14ec4ff48279142ce4d375204e0,5,5,0,48.027,true,database_timeout,5,3,1,1290
-text_mode,26,checkout timeout after config drift on blue deployment [cycle 3],4,262151,65538,264869,0,0,0,0,0,false,,5,5,0,91.648,true,database_timeout,0,0,0,0
-structured_mode,26,checkout timeout after config drift on blue deployment [cycle 3],6,3986,997,9460,1,2,6,2309,8388608,true,df01f14ec4ff48279142ce4d375204e0,5,3,2,47.802,true,database_timeout,5,3,1,1279
-text_mode,27,payment timeout while talking to checkout database [cycle 3],4,262152,65538,264853,0,0,0,0,0,false,,5,5,0,91.875,true,database_timeout,0,0,0,0
-structured_mode,27,payment timeout while talking to checkout database [cycle 3],6,4120,1030,9543,1,2,6,2341,8388608,true,df01f14ec4ff48279142ce4d375204e0,5,3,2,51.606,true,database_timeout,5,3,1,1273
-text_mode,28,canary rollout triggers repeated postgres timeout [cycle 3],4,262151,65538,264849,0,0,0,0,0,false,,5,5,0,91.670,true,database_timeout,0,0,0,0
-structured_mode,28,canary rollout triggers repeated postgres timeout [cycle 3],6,4114,1029,9601,1,2,6,2371,8388608,true,df01f14ec4ff48279142ce4d375204e0,5,3,2,46.913,true,database_timeout,5,3,1,1305
-text_mode,29,credential refresh fails with permission denied [cycle 3],4,262152,65538,264839,0,0,0,0,0,false,,5,5,0,91.630,true,permission_denied,0,0,0,0
-structured_mode,29,credential refresh fails with permission denied [cycle 3],6,4253,1064,9829,1,2,6,2458,8388608,true,bcb0e776b0b548cf82822c158974b00a,5,5,0,51.007,true,permission_denied,5,3,1,1360
-text_mode,30,worker restart still cannot read secret volume [cycle 3],4,262154,65539,264839,0,0,0,0,0,false,,5,5,0,91.643,true,permission_denied,0,0,0,0
-structured_mode,30,worker restart still cannot read secret volume [cycle 3],6,4223,1056,9814,1,2,6,2458,8388608,true,bcb0e776b0b548cf82822c158974b00a,5,4,1,49.349,true,permission_denied,5,3,1,1374
+text_mode,1,checkout database timeout on primary failover,4,262266,65567,264909,0,0,0,0,0,false,,5,5,0,91.729,true,database_timeout,0,0,0,0
+structured_mode,1,checkout database timeout on primary failover,6,3779,945,9228,1,2,0,2330,8388608,false,,5,5,0,60.373,true,database_timeout,5,3,1,1288
+text_mode,2,checkout timeout after config drift on blue deployment,4,262278,65570,264957,0,0,0,0,0,false,,5,5,0,91.623,true,database_timeout,0,0,0,0
+structured_mode,2,checkout timeout after config drift on blue deployment,6,3941,986,9407,1,2,6,2305,8388608,true,bac84281b46f414ba7bb1e9df6287c42,5,3,2,49.164,true,database_timeout,5,3,1,1277
+text_mode,3,payment timeout while talking to checkout database,4,262279,65570,264942,0,0,0,0,0,false,,5,5,0,91.764,true,database_timeout,0,0,0,0
+structured_mode,3,payment timeout while talking to checkout database,6,4075,1019,9495,1,2,6,2339,8388608,true,bac84281b46f414ba7bb1e9df6287c42,5,3,2,43.570,true,database_timeout,5,3,1,1273
+text_mode,4,canary rollout triggers repeated postgres timeout,4,262278,65570,264938,0,0,0,0,0,false,,5,5,0,91.770,true,database_timeout,0,0,0,0
+structured_mode,4,canary rollout triggers repeated postgres timeout,6,4069,1018,9549,1,2,6,2369,8388608,true,bac84281b46f414ba7bb1e9df6287c42,5,3,2,45.492,true,database_timeout,5,3,1,1305
+text_mode,5,credential refresh fails with permission denied,4,262279,65570,264929,0,0,0,0,0,false,,5,5,0,91.618,true,permission_denied,0,0,0,0
+structured_mode,5,credential refresh fails with permission denied,6,4016,1004,9577,1,2,0,2455,8388608,false,,5,5,0,45.712,true,permission_denied,5,3,1,1359
+text_mode,6,worker restart still cannot read secret volume,4,262281,65571,264925,0,0,0,0,0,false,,5,5,0,91.626,true,permission_denied,0,0,0,0
+structured_mode,6,worker restart still cannot read secret volume,6,4178,1045,9763,1,2,6,2455,8388608,true,891f673a08b2449994e58aba8f8a84ba,5,4,1,47.030,true,permission_denied,5,3,1,1373
+text_mode,7,batch node loses database credentials after hardening,4,262145,65537,264816,0,0,0,0,0,false,,5,5,0,91.832,true,permission_denied,0,0,0,0
+structured_mode,7,batch node loses database credentials after hardening,6,4206,1052,9787,1,2,6,2451,8388608,true,891f673a08b2449994e58aba8f8a84ba,5,3,2,45.576,true,permission_denied,5,3,1,1365
+text_mode,8,checkout jobs fail to load credential bundle,4,262270,65568,264907,0,0,0,0,0,false,,5,5,0,91.633,true,permission_denied,0,0,0,0
+structured_mode,8,checkout jobs fail to load credential bundle,6,4208,1052,9778,1,2,6,2457,8388608,true,0486b97f186043b48bb7f2c8d1ff3edd,5,3,2,43.348,true,permission_denied,5,3,1,1353
+text_mode,9,database writes fail because storage is full,4,262257,65565,264898,0,0,0,0,0,false,,5,5,0,91.610,true,storage_full,0,0,0,0
+structured_mode,9,database writes fail because storage is full,6,3695,924,9220,1,2,0,2330,8388608,false,,5,5,0,48.747,true,storage_full,5,3,1,1310
+text_mode,10,replica promotion stalls on no space left error,4,262263,65566,264916,0,0,0,0,0,false,,5,5,0,91.641,true,storage_full,0,0,0,0
+structured_mode,10,replica promotion stalls on no space left error,6,3904,976,9447,1,2,6,2333,8388608,true,94c7fa66dbe34517a6a4a8dd1d5e0aef,5,4,1,47.917,true,storage_full,5,3,1,1311
+text_mode,11,maintenance job aborts because postgres volume is full,4,262282,65571,264960,0,0,0,0,0,false,,5,5,0,91.624,true,storage_full,0,0,0,0
+structured_mode,11,maintenance job aborts because postgres volume is full,6,4012,1003,9483,1,2,6,2328,8388608,true,94c7fa66dbe34517a6a4a8dd1d5e0aef,5,3,2,48.729,true,storage_full,5,3,1,1286
+text_mode,12,checkout recovery loop hits disk-full condition again,4,262285,65572,264958,0,0,0,0,0,false,,5,5,0,91.632,true,storage_full,0,0,0,0
+structured_mode,12,checkout recovery loop hits disk-full condition again,6,4106,1027,9581,1,2,6,2366,8388608,true,94c7fa66dbe34517a6a4a8dd1d5e0aef,5,3,2,46.448,true,storage_full,5,3,1,1298
+text_mode,13,checkout database timeout on primary failover [cycle 2],4,262286,65572,264969,0,0,0,0,0,false,,5,5,0,91.616,true,database_timeout,0,0,0,0
+structured_mode,13,checkout database timeout on primary failover [cycle 2],6,4016,1004,9488,1,2,6,2334,8388608,true,bac84281b46f414ba7bb1e9df6287c42,5,5,0,47.777,true,database_timeout,5,3,1,1290
+text_mode,14,checkout timeout after config drift on blue deployment [cycle 2],4,262151,65538,264868,0,0,0,0,0,false,,5,5,0,91.630,true,database_timeout,0,0,0,0
+structured_mode,14,checkout timeout after config drift on blue deployment [cycle 2],6,3986,997,9457,1,2,6,2308,8388608,true,bac84281b46f414ba7bb1e9df6287c42,5,3,2,45.155,true,database_timeout,5,3,1,1278
+text_mode,15,payment timeout while talking to checkout database [cycle 2],4,262152,65538,264854,0,0,0,0,0,false,,5,5,0,91.623,true,database_timeout,0,0,0,0
+structured_mode,15,payment timeout while talking to checkout database [cycle 2],6,4120,1030,9542,1,2,6,2342,8388608,true,bac84281b46f414ba7bb1e9df6287c42,5,3,2,46.813,true,database_timeout,5,3,1,1274
+text_mode,16,canary rollout triggers repeated postgres timeout [cycle 2],4,262151,65538,264849,0,0,0,0,0,false,,5,5,0,91.622,true,database_timeout,0,0,0,0
+structured_mode,16,canary rollout triggers repeated postgres timeout [cycle 2],6,4114,1029,9602,1,2,6,2372,8388608,true,bac84281b46f414ba7bb1e9df6287c42,5,3,2,45.727,true,database_timeout,5,3,1,1306
+text_mode,17,credential refresh fails with permission denied [cycle 2],4,262152,65538,264841,0,0,0,0,0,false,,5,5,0,91.606,true,permission_denied,0,0,0,0
+structured_mode,17,credential refresh fails with permission denied [cycle 2],6,4253,1064,9830,1,2,6,2458,8388608,true,0486b97f186043b48bb7f2c8d1ff3edd,5,5,0,48.739,true,permission_denied,5,3,1,1360
+text_mode,18,worker restart still cannot read secret volume [cycle 2],4,262154,65539,264840,0,0,0,0,0,false,,5,5,0,91.609,true,permission_denied,0,0,0,0
+structured_mode,18,worker restart still cannot read secret volume [cycle 2],6,4223,1056,9808,1,2,6,2457,8388608,true,0486b97f186043b48bb7f2c8d1ff3edd,5,4,1,48.341,true,permission_denied,5,3,1,1373
+text_mode,19,batch node loses database credentials after hardening [cycle 2],4,262165,65542,264877,0,0,0,0,0,false,,5,5,0,91.613,true,permission_denied,0,0,0,0
+structured_mode,19,batch node loses database credentials after hardening [cycle 2],6,4251,1063,9836,1,2,6,2454,8388608,true,0486b97f186043b48bb7f2c8d1ff3edd,5,3,2,46.815,true,permission_denied,5,3,1,1366
+text_mode,20,checkout jobs fail to load credential bundle [cycle 2],4,262290,65573,264969,0,0,0,0,0,false,,5,5,0,91.643,true,permission_denied,0,0,0,0
+structured_mode,20,checkout jobs fail to load credential bundle [cycle 2],6,4253,1064,9825,1,2,6,2459,8388608,true,0486b97f186043b48bb7f2c8d1ff3edd,5,3,2,44.686,true,permission_denied,5,3,1,1353
+text_mode,21,database writes fail because storage is full [cycle 2],4,262277,65570,264953,0,0,0,0,0,false,,5,5,0,91.613,true,storage_full,0,0,0,0
+structured_mode,21,database writes fail because storage is full [cycle 2],6,3932,983,9470,1,2,6,2331,8388608,true,94c7fa66dbe34517a6a4a8dd1d5e0aef,5,5,0,51.764,true,storage_full,5,3,1,1309
+text_mode,22,replica promotion stalls on no space left error [cycle 2],4,262283,65571,264974,0,0,0,0,0,false,,5,5,0,91.613,true,storage_full,0,0,0,0
+structured_mode,22,replica promotion stalls on no space left error [cycle 2],6,3944,986,9486,1,2,6,2332,8388608,true,94c7fa66dbe34517a6a4a8dd1d5e0aef,5,4,1,48.282,true,storage_full,5,3,1,1310
+text_mode,23,maintenance job aborts because postgres volume is full [cycle 2],4,262155,65539,264872,0,0,0,0,0,false,,5,5,0,91.655,true,storage_full,0,0,0,0
+structured_mode,23,maintenance job aborts because postgres volume is full [cycle 2],6,4052,1013,9525,1,2,6,2329,8388608,true,94c7fa66dbe34517a6a4a8dd1d5e0aef,5,3,2,52.736,true,storage_full,5,3,1,1287
+text_mode,24,checkout recovery loop hits disk-full condition again [cycle 2],4,262158,65540,264869,0,0,0,0,0,false,,5,5,0,91.622,true,storage_full,0,0,0,0
+structured_mode,24,checkout recovery loop hits disk-full condition again [cycle 2],6,4146,1037,9619,1,2,6,2366,8388608,true,94c7fa66dbe34517a6a4a8dd1d5e0aef,5,3,2,48.707,true,storage_full,5,3,1,1298
+text_mode,25,checkout database timeout on primary failover [cycle 3],4,262286,65572,264967,0,0,0,0,0,false,,5,5,0,91.639,true,database_timeout,0,0,0,0
+structured_mode,25,checkout database timeout on primary failover [cycle 3],6,4016,1004,9486,1,2,6,2333,8388608,true,bac84281b46f414ba7bb1e9df6287c42,5,5,0,49.073,true,database_timeout,5,3,1,1289
+text_mode,26,checkout timeout after config drift on blue deployment [cycle 3],4,262151,65538,264868,0,0,0,0,0,false,,5,5,0,91.617,true,database_timeout,0,0,0,0
+structured_mode,26,checkout timeout after config drift on blue deployment [cycle 3],6,3986,997,9458,1,2,6,2309,8388608,true,bac84281b46f414ba7bb1e9df6287c42,5,3,2,48.607,true,database_timeout,5,3,1,1279
+text_mode,27,payment timeout while talking to checkout database [cycle 3],4,262152,65538,264854,0,0,0,0,0,false,,5,5,0,91.642,true,database_timeout,0,0,0,0
+structured_mode,27,payment timeout while talking to checkout database [cycle 3],6,4120,1030,9549,1,2,6,2342,8388608,true,bac84281b46f414ba7bb1e9df6287c42,5,3,2,49.756,true,database_timeout,5,3,1,1274
+text_mode,28,canary rollout triggers repeated postgres timeout [cycle 3],4,262151,65538,264849,0,0,0,0,0,false,,5,5,0,91.634,true,database_timeout,0,0,0,0
+structured_mode,28,canary rollout triggers repeated postgres timeout [cycle 3],6,4114,1029,9598,1,2,6,2372,8388608,true,bac84281b46f414ba7bb1e9df6287c42,5,3,2,45.666,true,database_timeout,5,3,1,1306
+text_mode,29,credential refresh fails with permission denied [cycle 3],4,262152,65538,264842,0,0,0,0,0,false,,5,5,0,91.608,true,permission_denied,0,0,0,0
+structured_mode,29,credential refresh fails with permission denied [cycle 3],6,4253,1064,9829,1,2,6,2457,8388608,true,0486b97f186043b48bb7f2c8d1ff3edd,5,5,0,50.277,true,permission_denied,5,3,1,1359
+text_mode,30,worker restart still cannot read secret volume [cycle 3],4,262154,65539,264839,0,0,0,0,0,false,,5,5,0,91.642,true,permission_denied,0,0,0,0
+structured_mode,30,worker restart still cannot read secret volume [cycle 3],6,4223,1056,9813,1,2,6,2458,8388608,true,0486b97f186043b48bb7f2c8d1ff3edd,5,4,1,49.199,true,permission_denied,5,3,1,1374
