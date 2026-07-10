@@ -4,24 +4,73 @@ from __future__ import annotations
 
 import os
 import socket
+import struct
 import threading
 from typing import Any, Callable, Dict, Optional, Set
 
-from ..protocol import ConnectionClosedError, decode_frame_from_socket, encode_frame
+from ..metrics.recorder import MetricsRecorder
+from ..protocol import (
+    ConnectionClosedError,
+    EmptyFrameError,
+    FRAME_HEADER_SIZE,
+    FrameTooLargeError,
+    decode_frame_from_socket,
+    decode_json,
+    encode_frame,
+)
+from .. import protocol as protocol_module
 
 RequestHandler = Callable[[Dict[str, Any]], Dict[str, Any]]
 
 
-def send_frame(sock: socket.socket, message_dict: Dict[str, Any]) -> None:
+def send_frame(
+    sock: socket.socket,
+    message_dict: Dict[str, Any],
+    metrics_recorder: Optional[MetricsRecorder] = None,
+) -> None:
     """Send one protocol frame over a connected socket."""
 
-    sock.sendall(encode_frame(message_dict))
+    frame = encode_frame(message_dict)
+    sock.sendall(frame)
+    if metrics_recorder is not None:
+        metrics_recorder.record_sent(len(frame))
 
 
-def recv_frame(sock: socket.socket) -> Dict[str, Any]:
+def recv_frame(
+    sock: socket.socket,
+    metrics_recorder: Optional[MetricsRecorder] = None,
+) -> Dict[str, Any]:
     """Receive one protocol frame from a connected socket."""
 
-    return decode_frame_from_socket(sock)
+    if metrics_recorder is None:
+        return decode_frame_from_socket(sock)
+
+    header = _recv_exact(sock, FRAME_HEADER_SIZE)
+    frame_length = struct.unpack(">I", header)[0]
+    if frame_length == 0:
+        raise EmptyFrameError("received empty frame")
+    if frame_length > protocol_module.MAX_FRAME_SIZE:
+        raise FrameTooLargeError(
+            f"frame body exceeds limit: {frame_length} > {protocol_module.MAX_FRAME_SIZE}"
+        )
+    body = _recv_exact(sock, frame_length)
+    metrics_recorder.record_received(FRAME_HEADER_SIZE + frame_length)
+    return decode_json(body)
+
+
+def _recv_exact(sock: socket.socket, size: int) -> bytes:
+    chunks = bytearray()
+    while len(chunks) < size:
+        try:
+            chunk = sock.recv(size - len(chunks))
+        except socket.timeout as exc:
+            raise ConnectionClosedError("socket read timed out") from exc
+        if not chunk:
+            if not chunks:
+                raise ConnectionClosedError("peer closed the connection")
+            raise ConnectionClosedError("connection closed mid-frame")
+        chunks.extend(chunk)
+    return bytes(chunks)
 
 
 def connect_unix_socket(socket_path: str, timeout: float = 5.0) -> socket.socket:
@@ -43,11 +92,13 @@ class UnixDomainSocketServer:
         handler: RequestHandler,
         backlog: int = 16,
         accept_timeout: float = 0.5,
+        metrics_recorder: Optional[MetricsRecorder] = None,
     ) -> None:
         self.socket_path = socket_path
         self._handler = handler
         self._backlog = backlog
         self._accept_timeout = accept_timeout
+        self._metrics_recorder = metrics_recorder
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._server_socket: Optional[socket.socket] = None
@@ -136,7 +187,7 @@ class UnixDomainSocketServer:
         try:
             while not self._stop_event.is_set():
                 try:
-                    request = recv_frame(client_socket)
+                    request = recv_frame(client_socket, self._metrics_recorder)
                 except ConnectionClosedError:
                     break
                 except Exception as exc:
@@ -160,8 +211,7 @@ class UnixDomainSocketServer:
 
     def _safe_send(self, client_socket: socket.socket, response: Dict[str, Any]) -> bool:
         try:
-            send_frame(client_socket, response)
+            send_frame(client_socket, response, self._metrics_recorder)
             return True
         except OSError:
             return False
-

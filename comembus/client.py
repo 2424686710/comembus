@@ -7,6 +7,7 @@ import socket
 import threading
 from typing import Any, Dict, Optional
 
+from .metrics.recorder import MetricsRecorder
 from .object_store.shm_store import SharedMemoryObjectStore
 from .protocol import Message, ProtocolError
 from .transport.uds import connect_unix_socket, recv_frame, send_frame
@@ -22,12 +23,13 @@ class AgentBusClient:
 
     socket_path: str
     timeout: float = 5.0
+    metrics_recorder: Optional[MetricsRecorder] = None
 
     def __post_init__(self) -> None:
         self._socket = connect_unix_socket(self.socket_path, self.timeout)
         self._lock = threading.Lock()
         self._closed = False
-        self.object_store = SharedMemoryObjectStore()
+        self.object_store = SharedMemoryObjectStore(self.metrics_recorder)
 
     def register(self, agent_id: str) -> Dict[str, Any]:
         return self._request(Message(type="register", payload={"agent_id": agent_id}))
@@ -63,8 +65,8 @@ class AgentBusClient:
             raise AgentBusClientError("client is closed")
         try:
             with self._lock:
-                send_frame(self._socket, message.to_dict())
-                response = recv_frame(self._socket)
+                send_frame(self._socket, message.to_dict(), self.metrics_recorder)
+                response = recv_frame(self._socket, self.metrics_recorder)
         except OSError as exc:
             raise AgentBusClientError("socket communication failed") from exc
         except ProtocolError:
@@ -75,4 +77,3 @@ class AgentBusClient:
         if response.get("ok") is True:
             return response.get("data")
         raise AgentBusClientError(str(response.get("error", "unknown server error")))
-

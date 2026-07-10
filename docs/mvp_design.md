@@ -816,3 +816,34 @@ SharedBlackboard 对应赛题里的“共享记忆机制”这一层能力：
 - 共享黑板：在共享内存上层实现多 agent 可见的状态表或对象目录。
 - 生命周期管理：加入引用计数、租约、心跳和回收器，减少共享内存泄漏风险。
 - benchmark：系统化测量小消息延迟、大对象吞吐、复制次数、CPU 占用和 `/dev/shm` 使用情况。
+
+## v1.3 严谨 Benchmark 与组件消融设计
+
+v1.3 在原 MVP 上增加独立实验层，不替换已有 demo、旧 benchmark 或 `run_all.sh`。兼容边界如下：
+
+- UDS 的 `send_frame` / `recv_frame` 只增加可选 `MetricsRecorder`；默认 `None` 时保留旧路径。
+- `SharedMemoryObjectStore` 只增加可选 recorder；原有无参数构造仍有效。
+- 旧 CSV 字段和旧汇总脚本不改；v1.3 写入单独的结果文件。
+- `AdaptiveTransportPolicy()` 仍是固定 64KB fallback；只有显式 `from_profile()` 才使用校准阈值。
+
+### 真实字节而不是估算字节
+
+`MetricsRecorder` 在 `sendall` 成功后记录 `len(encoded_frame)`，因此包括 JSON body 和 4 字节长度头。接收端在实际读完 header/body 后记录相同 frame 长度。报告中的 `wire_bytes` 只取 `sent_bytes`，避免把同一个 frame 在发送端和接收端重复计数。
+
+共享内存采用另一组计数器：创建并复制 payload 后增加 `shm_bytes_written`，每次从 shared memory buffer 复制数据后增加 `shm_bytes_read`。这两个字段不属于 UDS wire bytes。
+
+### 公平流程
+
+9 个消融模式共享同一场景、同一日志 bytes、同一配置文本、5 个 Agent 和 5 次 frame 交接。流程固定为 Planner → Log → Config → Memory → Review → Planner。最终 root cause 从相同配置事实中确定性解析，所有模式都必须验证 `root_cause_correct=true`。
+
+`text_full_context` 每次携带完整、逐步累积的文本上下文，不再通过人为固定延迟把基线做弱。`text_summary` 使用固定摘要函数。`json_full_state` 传完整 JSON 状态。结构化消融则以 `structured_full` 为控制组，每次只移除 SHM/ObjectRef、StatePatch、MemoryRef、EmbeddingState/Ref 或 Capability Discovery 中的一项。
+
+### 校准策略
+
+`AdaptiveTransportCalibrator` 在每个 size/receiver 组合上分别实测 direct UDS 和 SHM ref。对每个 receiver 数，最小的“SHM 平均延迟不高于 direct”尺寸作为 crossover；若测试范围内没有 crossover，则阈值设为最大测试尺寸加 1 byte。profile 保存测试矩阵、seed、warmup、rounds、延迟统计和阈值，policy 不使用估算 latency。
+
+### 统计与进程指标
+
+统计模块只用标准库，percentile 使用有序样本上的线性插值，standard deviation 使用样本标准差，95% CI 使用 `mean ± 1.96 * s / sqrt(n)`。CPU time 来自 `time.process_time()`，峰值 RSS 和 context switch 来自 `resource.getrusage(RUSAGE_SELF)`。Linux/openEuler 的 `ru_maxrss` 单位按 KiB 报告。
+
+`estimated_tokens` 只是 `ceil(text_chars / 4)`，不是模型 tokenizer 或模型响应中的真实 token。核心严谨 benchmark 不访问远程 LLM。

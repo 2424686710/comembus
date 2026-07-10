@@ -6,7 +6,9 @@ from hashlib import sha256
 from multiprocessing import shared_memory
 import time
 import uuid
+from typing import Optional
 
+from ..metrics.recorder import MetricsRecorder
 from ..protocol import ObjectRef
 
 
@@ -25,6 +27,9 @@ class ChecksumMismatchError(ObjectStoreError):
 class SharedMemoryObjectStore:
     """Store byte payloads in POSIX shared memory."""
 
+    def __init__(self, metrics_recorder: Optional[MetricsRecorder] = None) -> None:
+        self.metrics_recorder = metrics_recorder
+
     def put_bytes(self, data: bytes) -> ObjectRef:
         if not isinstance(data, (bytes, bytearray, memoryview)):
             raise TypeError("data must be bytes-like")
@@ -39,6 +44,8 @@ class SharedMemoryObjectStore:
             shm.buf[: len(raw)] = raw
         finally:
             shm.close()
+        if self.metrics_recorder is not None:
+            self.metrics_recorder.record_shm_write(len(raw))
 
         return ObjectRef(
             object_id=object_id,
@@ -54,6 +61,8 @@ class SharedMemoryObjectStore:
             data = bytes(shm.buf[: ref.size])
         finally:
             shm.close()
+        if self.metrics_recorder is not None:
+            self.metrics_recorder.record_shm_read(len(data))
 
         checksum = sha256(data).hexdigest()
         if checksum != ref.checksum:
@@ -82,4 +91,3 @@ class SharedMemoryObjectStore:
             raise ObjectNotFoundError(
                 f"shared memory object not found: {ref.shm_name}"
             ) from exc
-

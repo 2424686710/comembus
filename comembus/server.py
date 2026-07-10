@@ -7,6 +7,7 @@ import threading
 import time
 from typing import Any, DefaultDict, Dict, List, Optional, Set
 
+from .metrics.recorder import MetricsRecorder
 from .protocol import Message, ProtocolError
 from .transport.uds import UnixDomainSocketServer
 
@@ -14,12 +15,20 @@ from .transport.uds import UnixDomainSocketServer
 class AgentBusServer:
     """Small UDS-based message bus server."""
 
-    def __init__(self, socket_path: str) -> None:
+    def __init__(
+        self,
+        socket_path: str,
+        metrics_recorder: Optional[MetricsRecorder] = None,
+    ) -> None:
         self.socket_path = socket_path
         self._lock = threading.Lock()
         self._registered_agents: Set[str] = set()
         self._topics: DefaultDict[str, List[Dict[str, Any]]] = defaultdict(list)
-        self._uds_server = UnixDomainSocketServer(socket_path, self._handle_request)
+        self._uds_server = UnixDomainSocketServer(
+            socket_path,
+            self._handle_request,
+            metrics_recorder=metrics_recorder,
+        )
         self._running = False
 
     def start(self) -> None:
@@ -86,4 +95,3 @@ class AgentBusServer:
     def _delayed_stop(self) -> None:
         time.sleep(0.05)
         self.stop()
-
