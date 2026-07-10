@@ -6,11 +6,24 @@ from .shm_store import (
     ObjectStoreError,
     SharedMemoryObjectStore,
 )
+from .lease_manager import (
+    LeaseObjectNotFoundError,
+    ObjectAlreadyRegisteredError,
+    ObjectLeaseError,
+    ObjectLeaseManager,
+    ObjectNotActiveError,
+)
+from .lifecycle import ObjectLifecycleRecord
 
 __all__ = [
     "ChecksumMismatchError",
     "ObjectNotFoundError",
     "ObjectStoreError",
     "SharedMemoryObjectStore",
+    "LeaseObjectNotFoundError",
+    "ObjectAlreadyRegisteredError",
+    "ObjectLeaseError",
+    "ObjectLeaseManager",
+    "ObjectLifecycleRecord",
+    "ObjectNotActiveError",
 ]
-

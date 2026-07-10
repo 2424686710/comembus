@@ -847,3 +847,23 @@ v1.3 在原 MVP 上增加独立实验层，不替换已有 demo、旧 benchmark 
 统计模块只用标准库，percentile 使用有序样本上的线性插值，standard deviation 使用样本标准差，95% CI 使用 `mean ± 1.96 * s / sqrt(n)`。CPU time 来自 `time.process_time()`，峰值 RSS 和 context switch 来自 `resource.getrusage(RUSAGE_SELF)`。Linux/openEuler 的 `ru_maxrss` 单位按 KiB 报告。
 
 `estimated_tokens` 只是 `ceil(text_chars / 4)`，不是模型 tokenizer 或模型响应中的真实 token。核心严谨 benchmark 不访问远程 LLM。
+
+## v1.4 可靠投递、对象生命周期与状态恢复
+
+v1.4 不创建第二套协议，而是在原 `Message` 和 AgentBus 命令上增加可选元数据与命令。旧 `poll` 仍是自动 ACK；只有 `poll_reliable` 才把消息保留在 invisible 集合并要求显式 ACK/NACK。这样旧 demo 无需修改，同时新 worker 可以获得 at-least-once delivery。
+
+可靠队列在一个锁保护的状态机中维护 available、invisible、known ID 和 processed ID：
+
+1. publish 检查 DedupStore 和 in-flight ID。
+2. poll 把 available 消息转为 invisible，并设置 deadline。
+3. ACK 原子移除 invisible 记录并写入处理结果。
+4. NACK 或 visibility timeout 把同一 envelope 重新入队，保留 message ID 并增加下次 attempt。
+5. 容量统计同时包含 available 和 invisible，避免慢消费者绕过背压。
+
+共享对象采用 lease + holder set。`ref_count` 始终等于不同 consumer holder 数。lease 未到期时，即使 refcount 已为 0 也不删除；lease 到期时，崩溃 consumer 的 holder 被判为 leaked 并回收，随后在 refcount 0 条件下 unlink。所有非预期 unlink 错误继续向调用者抛出。
+
+SQLite 状态管理把 patch 审计日志和最新 snapshot 放入同一 WAL 事务，避免“patch 已写但 snapshot 未更新”或相反的半提交。进程重启只读取已提交 snapshot，并检查 patch log 不能领先于 snapshot。compact 在事务中固化最新 snapshot 后删除已覆盖 patch。
+
+Patch rebase 采用字段级保守规则：整字段 `set_fields` 只要 base→latest 已变化就冲突；list append 可组合；facts/artifacts merge 只有触及同一且已变化的 key 才冲突。无法确认安全时拒绝，而不是静默覆盖。
+
+failure injection 将预期故障与意外异常区分：预期异常必须真的发生并通过后置状态证明恢复；意外异常写入 CSV error 并令 benchmark 非零退出。详细状态机、表结构和异常规则见 `docs/reliability_design.md`。

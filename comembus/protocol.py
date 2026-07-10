@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 import json
 import socket
 import struct
+import time
 from typing import Any, Dict, Mapping, Optional
+import uuid
 
 FRAME_HEADER_SIZE = 4
 MAX_FRAME_SIZE = 1024 * 1024
@@ -72,12 +74,20 @@ class Message:
     type: str
     topic: Optional[str] = None
     payload: Dict[str, Any] = field(default_factory=dict)
+    message_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    delivery_attempt: int = 0
+    created_at: float = field(default_factory=time.time)
+    visibility_deadline: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "type": self.type,
             "topic": self.topic,
             "payload": self.payload,
+            "message_id": self.message_id,
+            "delivery_attempt": self.delivery_attempt,
+            "created_at": self.created_at,
+            "visibility_deadline": self.visibility_deadline,
         }
 
     @classmethod
@@ -86,6 +96,10 @@ class Message:
             message_type = data["type"]
             topic = data.get("topic")
             payload = data.get("payload", {})
+            message_id = data.get("message_id") or uuid.uuid4().hex
+            delivery_attempt = data.get("delivery_attempt", 0)
+            created_at = data.get("created_at", time.time())
+            visibility_deadline = data.get("visibility_deadline")
         except AttributeError as exc:
             raise ProtocolError("message must be a mapping") from exc
 
@@ -95,8 +109,28 @@ class Message:
             raise ProtocolError("message topic must be a string or null")
         if not isinstance(payload, dict):
             raise ProtocolError("message payload must be a JSON object")
+        if not isinstance(message_id, str) or not message_id:
+            raise ProtocolError("message_id must be a non-empty string")
+        if not isinstance(delivery_attempt, int) or delivery_attempt < 0:
+            raise ProtocolError("delivery_attempt must be a non-negative integer")
+        if not isinstance(created_at, (int, float)):
+            raise ProtocolError("created_at must be a number")
+        if visibility_deadline is not None and not isinstance(
+            visibility_deadline, (int, float)
+        ):
+            raise ProtocolError("visibility_deadline must be a number or null")
 
-        return cls(type=message_type, topic=topic, payload=payload)
+        return cls(
+            type=message_type,
+            topic=topic,
+            payload=payload,
+            message_id=message_id,
+            delivery_attempt=delivery_attempt,
+            created_at=float(created_at),
+            visibility_deadline=(
+                None if visibility_deadline is None else float(visibility_deadline)
+            ),
+        )
 
 
 def encode_json(data: Mapping[str, Any]) -> bytes:
@@ -163,4 +197,3 @@ def _recv_exact(sock: socket.socket, size: int) -> bytes:
             raise ConnectionClosedError("connection closed mid-frame")
         chunks.extend(chunk)
     return bytes(chunks)
-

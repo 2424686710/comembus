@@ -42,6 +42,15 @@ class SharedMemoryObjectStore:
         shm = shared_memory.SharedMemory(name=shm_name, create=True, size=len(raw))
         try:
             shm.buf[: len(raw)] = raw
+        except BaseException as exc:
+            try:
+                shm.unlink()
+            except BaseException as cleanup_error:
+                if hasattr(exc, "add_note"):
+                    exc.add_note(
+                        f"shared-memory cleanup also failed: {cleanup_error}"
+                    )
+            raise
         finally:
             shm.close()
         if self.metrics_recorder is not None:
