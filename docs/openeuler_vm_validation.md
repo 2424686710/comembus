@@ -34,19 +34,23 @@ git clone <your-gitlink-or-git-url> CoMemBus
 cd CoMemBus
 ```
 
-## 原生验证命令
+## 原生最终验证命令
 
 在 VM 中执行：
 
 ```bash
-bash scripts/run_all.sh
-bash scripts/run_llm_demo.sh
+bash scripts/run_release_validation.sh
 ```
 
 这里的设计含义是：
 
-- `run_all.sh` 验证默认离线、无外部模型依赖的完整主流程
-- `run_llm_demo.sh` 验证 optional LLM adapter 的默认 mock provider 也能在 VM 中离线运行
+- 先验证 OS/Python/SQLite/SharedMemory 环境，再执行完整 unittest
+- 顺序执行旧 `run_all.sh`、可靠 Agent demo、ablation、rigorous、failure、embedding 和 memory quality benchmark
+- LLM 步骤固定使用离线 mock provider；release 脚本会移除 API credential 环境变量
+- CodeAct 步骤验证 AST、timeout 和 Linux rlimit 后的正常执行
+- 最后检查 `/dev/shm` 并生成 `results/release_manifest.json`
+
+脚本使用 `set -euo pipefail`，任一核心命令失败都会立即停止，不能通过后续汇总掩盖失败。
 
 ## 需要保存的验证证据
 
@@ -55,7 +59,9 @@ bash scripts/run_llm_demo.sh
 1. `/etc/openEuler-release` 输出
 2. `bash scripts/run_all.sh` 成功日志
 3. `results/summary_report.md`
-4. `/dev/shm` 无 `comembus_` 残留的检查结果
+4. `results/rigorous_summary.md`
+5. `results/release_manifest.json`
+6. `/dev/shm` 无 `comembus_` 残留的检查结果
 
 例如：
 
@@ -64,6 +70,8 @@ find /dev/shm -maxdepth 1 -name 'comembus_*' -print
 ```
 
 没有输出即可作为“共享内存对象已清理”的证据。
+
+`release_manifest.json` 记录当前 Git commit、Python 版本、OS release、动态发现的测试总数、每个结果文件的 SHA-256、UTC 生成时间和 `shm_residue_count`。它不读取或保存 API Key。
 
 ## Docker 与 VM 的关系
 

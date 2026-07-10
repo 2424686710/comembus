@@ -23,6 +23,7 @@ class ASTCodeValidator(ast.NodeVisitor):
             "len",
             "max",
             "min",
+            "print",
             "range",
             "sorted",
             "str",

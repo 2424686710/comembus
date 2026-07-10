@@ -877,3 +877,15 @@ v1.5 保留原有 hash encoder 和 JSON embedding 数据类，但把“语义向
 MemoryUnit 的新字段让复用决策具备时间和来源边界。content hash 在 SQLite 写入前去重；version 和 parent IDs 表达演化；valid/expires 表达 TTL；superseded_by 让错误旧策略保留审计记录但退出默认候选；provenance 记录来源 task/agent/evidence/derivation。旧表通过增量 ALTER TABLE 迁移，不删除既有数据。
 
 检索评估将“命中”拆成正确复用、错误复用和 stale rejection。四种方法对完全相同的 active corpus 排序，过期和 superseded 记录在 ranking 前统一过滤。hybrid 使用标签作为 hard-negative 的主要区分信号，再结合关键词、hash embedding 和 confidence。评估报告 Precision@k、Recall@k、MRR、wrong reuse 和 task success；详细公式见 `docs/memory_quality.md`。
+
+## v1.6 最终集成与发布审计
+
+v1.6 不引入新的消息协议或状态框架，而是把既有组件接到同一条端到端链路。可靠 demo 中的消息仍走原 UDS AgentBus：LogAgent 第一次可靠 poll 后断连且不 ACK，visibility deadline 触发 attempt 2；业务在第二次投递执行一次，ACK 后重复 publish 由原 DedupStore 返回处理结果。大日志继续使用 ObjectRef，但由 ObjectLeaseManager 记录崩溃 holder，并在 lease 到期时回收。
+
+状态主链路改用 SQLiteStateManager。Log/Config 从同一 version 1 snapshot 构造只修改不同 facts key 的 patch；第一个 patch 事务提交后，第二个 stale patch 先触发版本冲突，再由 PatchRebaser 按通用字段规则重放。关闭 manager 模拟 Coordinator 重启，重新打开同一 WAL 数据库并 recover 到 version 3。
+
+CodeAct 不扩展可执行语言范围。AST 白名单之后，worker 在 exec 前额外施加 Linux `RLIMIT_CPU`、`RLIMIT_AS`、`RLIMIT_FSIZE`、`RLIMIT_NOFILE` 和 `RLIMIT_NPROC`；wall-clock timeout 仍由父进程执行。结果经单向 Pipe 回传，stdout 在 worker 内有界截断。
+
+Memory Quality 的最终数据集固定为 5 个 family、40 条 memory、30 条 query，每个 family 至少两个 hard negative。query tag 来源于可观察线索，不包含标准答案 family 标签；四种 ranker 不读取 corpus metadata 中的 quality family/role，也没有 family 特判。
+
+`run_release_validation.sh` 是最终 openEuler 交付入口。它在离线、无 credential 的环境中串行执行 v1.3-v1.6 全链路，并在成功后生成包含 Git/Python/OS/test count、结果 SHA-256 和 SHM residue 的 release manifest。核心命令的任意非零退出都会终止审计。

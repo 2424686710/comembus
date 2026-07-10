@@ -1,4 +1,4 @@
-# CoMemBus v1.5 Memory Quality and Binary Embedding Methodology
+# CoMemBus v1.5-v1.6 Memory Quality and Binary Embedding Methodology
 
 ## Binary embedding representation
 
@@ -48,16 +48,11 @@ Provenance can record source task, source agent, evidence memory IDs, derivation
 
 ## Quality corpus
 
-The labeled corpus includes:
+The v1.6 labeled corpus contains exactly 40 stored memories and 30 queries across five families: database listener mismatch, credential ownership, WAL retention, cache no-eviction policy, and certificate expiry. Every family contributes one validated positive, one contradictory superseded strategy, one expired strategy, at least two same-family hard negatives, and three further distractors. A duplicate write verifies content-hash dedup without increasing corpus size.
 
-- correct database wrong-port, credential ownership, and WAL/disk strategies;
-- cross-family negatives;
-- same-family hard negatives such as pool saturation versus wrong port, SELinux versus file ownership, and quota versus full disk;
-- an expired high-confidence database policy;
-- a contradictory DNS diagnosis superseded by a validated wrong-port memory;
-- a duplicate content write used to verify hash deduplication.
+Each query has explicit relevant memory IDs and the complete set of expired/superseded IDs. Query tags describe observable evidence such as `retired_listener`, `owner_mismatch`, `wal_retention`, `noeviction`, or `not_after`. They never include the answer family tags `database_timeout`, `permission_denied`, `storage_full`, `cache_failure`, or `tls_failure`.
 
-Each query has explicit relevant memory IDs and stale IDs. All four methods receive the same corpus and query labels.
+Corpus `quality_family` and `quality_role` values exist only in metadata for dataset auditing. `MemoryRanker` does not inspect those fields: all four methods receive the same content, summary, normal tags, validity state, and query features. Hybrid has one global weighting formula and no family-specific answer rule.
 
 ## Ranking methods
 
@@ -81,3 +76,5 @@ For every query and method:
 - `query_latency_ms` is measured end-to-end ranking latency.
 
 The wrong reuse metric is intentionally distinct from hit rate: returning a plausible but incorrect hard negative is counted as a failure, not a successful memory hit.
+
+The current 30-query run reports MRR/wrong-reuse of 0.8335/0.2333 for keyword, 1.0/0 for tag, 0.5543/0.5667 for hash embedding, and 1.0/0 for hybrid. Stale rejection is 1.0 for every method. The CSV records `query_count=30` and `corpus_size=40` on every row.

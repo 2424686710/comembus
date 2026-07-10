@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 
-from comembus.codeact.sandbox import run_code_sandbox
+from comembus.codeact.sandbox import MAX_OUTPUT_CHARS, run_code_sandbox
 from comembus.codeact.tool_agent import CodeActToolAgent
 from comembus.memory.blackboard import SharedBlackboard
 from comembus.state.task_state import TaskState
@@ -57,6 +57,48 @@ class CodeActSandboxTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertTrue(result["timeout"])
         self.assertIn("timed out", str(result["error"]))
+
+    def test_memory_bomb_is_limited(self) -> None:
+        result = run_code_sandbox(
+            "result = 'x' * (1024 * 1024 * 1024)",
+            inputs={},
+            timeout_sec=2.0,
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["timeout"])
+        self.assertTrue(
+            "MemoryError" in str(result["error"])
+            or "exit code" in str(result["error"])
+        )
+
+    def test_oversized_stdout_is_truncated(self) -> None:
+        result = run_code_sandbox(
+            "print('x' * 10000)\nresult = {'done': True}",
+            inputs={},
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(len(str(result["stdout"])), MAX_OUTPUT_CHARS)
+        self.assertTrue(result["stdout_truncated"])
+
+    def test_opening_many_files_is_forbidden(self) -> None:
+        result = run_code_sandbox(
+            "handles = []\nfor i in range(100):\n    handles.append(open('/dev/null'))\nresult = len(handles)",
+            inputs={},
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("allowed", str(result["error"]))
+
+    def test_fork_and_child_process_creation_are_forbidden(self) -> None:
+        result = run_code_sandbox(
+            "result = __import__('os').fork()",
+            inputs={},
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("allowed", str(result["error"]))
 
     def test_codeact_tool_agent_returns_root_cause(self) -> None:
         agent = CodeActToolAgent()

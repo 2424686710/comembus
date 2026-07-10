@@ -1,4 +1,4 @@
-# CoMemBus v1.4 Reliability Design
+# CoMemBus v1.4-v1.6 Reliability Design
 
 ## Compatibility boundary
 
@@ -96,3 +96,22 @@ Conflicts raise `PatchConflictError` with explicit field paths. The rebaser neve
 The CSV records success, recovery latency, delivery attempts, suppression/requeue/recovery/reclamation flags, shared-memory residue, and unexpected error text. The runner continues collecting rows after an unexpected scenario error, but marks that row failed and exits nonzero after writing the evidence.
 
 All implementation and tests use only the Python standard library and Linux facilities available on openEuler 24.03-LTS-SP3.
+
+## v1.6 end-to-end integration
+
+`run_reliable_agent_demo.py` connects the previously independent reliability pieces through the real UDS AgentBus client/server API:
+
+1. Coordinator persists version 1 with `SQLiteStateManager` and publishes log/config work with stable IDs.
+2. The first LogAgent uses `poll_reliable()`, acquires the large-log lease, and closes without ACK.
+3. Visibility expiry makes the same envelope available with `delivery_attempt=2`.
+4. The retry LogAgent reads the ObjectRef, executes analysis once, releases its holder, and ACKs the durable result.
+5. Republishing the same ID is suppressed by the server's `DedupStore`; no second business execution occurs.
+6. Config and Log patches were both created from version 1. Config commits first; the stale Log patch is rejected, verified non-conflicting by `PatchRebaser`, and applied at the latest version.
+7. A newly opened SQLite manager recovers version 3 and the final root cause from committed state.
+8. The crashed holder remains visible to lease accounting until deterministic expiry, when GC unlinks the segment and increments leaked/reclaimed statistics.
+
+Every acceptance flag is derived from final queue, dedup, state, patch, lease, and root-cause evidence. Cleanup executes in `finally`; cleanup failures propagate rather than being reported as successful recovery.
+
+## CodeAct process limits
+
+The CodeAct child keeps the existing AST allowlist and parent-enforced wall timeout. Before `exec`, it also applies Linux limits for CPU time, address space, file size, open descriptors, and child process count. `RLIMIT_NPROC=0` prevents nested process creation; therefore result transport uses a pre-created one-way pipe rather than a Queue feeder thread. The bounded stdout object records whether data exceeded 4096 characters.

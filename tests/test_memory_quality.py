@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 import unittest
 
-from benchmarks.bench_memory_quality import benchmark_rows
+from benchmarks.bench_memory_quality import (
+    QUALITY_FAMILY_TAGS,
+    _build_quality_corpus,
+    benchmark_rows,
+)
+from comembus.memory.blackboard import SharedBlackboard
 from comembus.memory.quality import RetrievalQualityQuery, evaluate_retrieval_quality
 from comembus.memory.ranking import MemoryRanker
 from comembus.memory.unit import MemoryUnit
@@ -98,6 +104,39 @@ class MemoryQualityTests(unittest.TestCase):
         )
         self.assertGreater(float(by_method["keyword_only"]["wrong_reuse_rate"]), 0)
         self.assertTrue(all(row["dedup_verified"] for row in rows))
+        self.assertTrue(all(int(row["query_count"]) >= 30 for row in rows))
+        self.assertTrue(all(int(row["corpus_size"]) >= 40 for row in rows))
+
+    def test_dataset_has_five_families_and_no_query_answer_family_tags(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="comembus-quality-shape-") as directory:
+            board = SharedBlackboard(os.path.join(directory, "quality.sqlite"))
+            try:
+                memories, queries, _ = _build_quality_corpus(board, time.time())
+            finally:
+                board.close()
+        families = {
+            str(memory.metadata.get("quality_family", ""))
+            for memory in memories
+            if memory.metadata.get("quality_family")
+        }
+        hard_counts = {
+            family: sum(
+                memory.metadata.get("quality_family") == family
+                and memory.metadata.get("quality_role") == "hard_negative"
+                for memory in memories
+            )
+            for family in families
+        }
+        self.assertGreaterEqual(len(families), 5)
+        self.assertTrue(all(count >= 2 for count in hard_counts.values()))
+        self.assertEqual(len(queries), 30)
+        self.assertEqual(len(memories), 40)
+        self.assertTrue(
+            all(
+                not (QUALITY_FAMILY_TAGS & {tag.lower() for tag in query.tags})
+                for query in queries
+            )
+        )
 
 
 if __name__ == "__main__":
