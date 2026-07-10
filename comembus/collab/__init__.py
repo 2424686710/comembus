@@ -11,6 +11,8 @@ from .metrics import CollaborationMetrics, count_text_chars, estimate_tokens, js
 from .protocol import AgentCapability, StructuredMessage, TextMessage
 from .structured_mode import StructuredCollaborationRunner
 from .text_mode import TextCollaborationRunner
+from .embedding_codec import EmbeddingBinaryCodec, EmbeddingCodecError
+from .embedding_store import EmbeddingRef as SharedEmbeddingRef, SharedEmbeddingStore
 
 __all__ = [
     "AgentCapability",
@@ -27,4 +29,8 @@ __all__ = [
     "json_size_bytes",
     "make_embedding_ref",
     "make_embedding_state",
+    "EmbeddingBinaryCodec",
+    "EmbeddingCodecError",
+    "SharedEmbeddingRef",
+    "SharedEmbeddingStore",
 ]

@@ -867,3 +867,13 @@ SQLite 状态管理把 patch 审计日志和最新 snapshot 放入同一 WAL 事
 Patch rebase 采用字段级保守规则：整字段 `set_fields` 只要 base→latest 已变化就冲突；list append 可组合；facts/artifacts merge 只有触及同一且已变化的 key 才冲突。无法确认安全时拒绝，而不是静默覆盖。
 
 failure injection 将预期故障与意外异常区分：预期异常必须真的发生并通过后置状态证明恢复；意外异常写入 CSV error 并令 benchmark 非零退出。详细状态机、表结构和异常规则见 `docs/reliability_design.md`。
+
+## v1.5 二进制 Embedding 与记忆检索质量
+
+v1.5 保留原有 hash encoder 和 JSON embedding 数据类，但把“语义向量如何交换”拆成四个可测通路。float32 codec 固定 4 bytes/维，使用显式小端格式和 SHA-256；shared ref 的控制面消息只传 ObjectRef、dim、dtype、checksum，向量本体不进入 JSON。memoryview 的生命周期绑定到 SharedMemory handle，退出 context 时先 release view 再 close，异常路径仍会 unlink benchmark 创建的对象。
+
+这里不把“非文本”简单定义为 JSON 中的数字数组：`embedding_json` 仍属于 JSON 控制面负载；`embedding_float32` 是真实二进制表示但为了直接 UDS JSON frame 需要 base64；`embedding_ref` 才是控制面只传引用、数据面读 shared binary buffer 的路径。
+
+MemoryUnit 的新字段让复用决策具备时间和来源边界。content hash 在 SQLite 写入前去重；version 和 parent IDs 表达演化；valid/expires 表达 TTL；superseded_by 让错误旧策略保留审计记录但退出默认候选；provenance 记录来源 task/agent/evidence/derivation。旧表通过增量 ALTER TABLE 迁移，不删除既有数据。
+
+检索评估将“命中”拆成正确复用、错误复用和 stale rejection。四种方法对完全相同的 active corpus 排序，过期和 superseded 记录在 ranking 前统一过滤。hybrid 使用标签作为 hard-negative 的主要区分信号，再结合关键词、hash embedding 和 confidence。评估报告 Precision@k、Recall@k、MRR、wrong reuse 和 task success；详细公式见 `docs/memory_quality.md`。
