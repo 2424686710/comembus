@@ -51,6 +51,7 @@ bash scripts/run_release_validation.sh
 - 最后检查 `/dev/shm` 并生成 `results/release_manifest.json`
 
 脚本使用 `set -euo pipefail`，任一核心命令失败都会立即停止，不能通过后续汇总掩盖失败。
+验证开始时要求 Git 工作树干净；执行中产生的 tracked 结果变化会在 manifest 生成前恢复，因此审计成功后 `git status --porcelain` 仍为空。新生成的 benchmark CSV/JSON 和 release manifest 由 `.gitignore` 排除，可作为本机审计证据保留。
 
 ## 需要保存的验证证据
 
